@@ -586,13 +586,10 @@
             <div class="toggles">
                 <button id="voice-toggle" class="toggle-btn" aria-pressed="false" title="Toggle Voice Cues">Voice</button>
                 <button id="breath-toggle" class="toggle-btn" aria-pressed="false" title="Toggle Breath Sound">Breath</button>
-                <button id="mp3-toggle" class="toggle-btn" aria-pressed="false" title="Use MP3 audio instead of synthetic">MP3</button>
                 <button id="haptic-toggle" class="toggle-btn" aria-pressed="false" title="Toggle Haptic Feedback">Haptic</button>
             </div>
-            <div id="ambient-toggles" class="ambient-toggles">
-                <button class="toggle-btn" data-ambient="fireplace" aria-pressed="false" title="Fireplace">Fire</button>
-                <button class="toggle-btn" data-ambient="waterfall" aria-pressed="false" title="Waterfall">Water</button>
-                <button class="toggle-btn" data-ambient="nature" aria-pressed="false" title="Nature">Nature</button>
+            <div class="ambient-toggles">
+                <button id="background-toggle" class="toggle-btn" aria-pressed="false" title="Cycle background sound: Fire → Water → Nature">Background</button>
             </div>
         </section>
 
@@ -633,15 +630,6 @@
             'Hold':   { color: 'var(--hold-color)',   glow: 'var(--glow-blue)' }
         };
 
-        // MP3 file mapping
-        const MP3_FILES = {
-            'Inhale': 'Inhale.mp3',
-            'Exhale': 'Exhale.mp3',
-            'Hold':   null  // Will alternate between Hold-1 and Hold-2
-        };
-        const HOLD_MP3S = ['Hold-1.mp3', 'Hold-2.mp3'];
-        let holdMp3Index = 0;
-
         const PREF_KEY = 'breathingAppPrefs';
         const MAX_STREAK_ICONS = 10;
 
@@ -663,9 +651,8 @@
             preferences: {
                 voice: true,
                 breath: true,
-                mp3: false,
                 haptic: false,
-                ambient: { fireplace: false, waterfall: false, nature: false }
+                ambient: null
             }
         };
 
@@ -678,8 +665,8 @@
             stopBtn: document.getElementById('stop-btn'),
             voiceToggle: document.getElementById('voice-toggle'),
             breathToggle: document.getElementById('breath-toggle'),
-            mp3Toggle: document.getElementById('mp3-toggle'),
             hapticToggle: document.getElementById('haptic-toggle'),
+            backgroundToggle: document.getElementById('background-toggle'),
             announcer: document.getElementById('announcer'),
             streakCounter: document.getElementById('streak-counter'),
             remainingTime: document.getElementById('remaining-time'),
@@ -690,7 +677,6 @@
             triangleSVG: document.getElementById('triangle-svg'),
             boxProgress: document.getElementById('box-progress'),
             triangleProgress: document.getElementById('triangle-progress'),
-            ambientToggles: document.getElementById('ambient-toggles'),
             shapeContainer: document.getElementById('shape-container'),
             modeBtns: document.querySelectorAll('.mode-btn')
         };
@@ -699,8 +685,6 @@
         let audioContext;
         let breathNodes = {};
         let ambientNodes = {};
-        let mp3Buffers = {};
-        let mp3CurrentSource = null;
         const isSpeechSupported = 'speechSynthesis' in window;
         let speechInitialized = false;
         let voices = [];
@@ -729,7 +713,6 @@
 
             UI.voiceToggle.addEventListener('click', () => togglePreference('voice'));
             UI.breathToggle.addEventListener('click', () => togglePreference('breath'));
-            UI.mp3Toggle.addEventListener('click', () => togglePreference('mp3'));
             UI.hapticToggle.addEventListener('click', () => togglePreference('haptic'));
 
             // Duration selector
@@ -740,16 +723,38 @@
             // +1 minute button
             UI.addMinuteBtn.addEventListener('click', addMinute);
 
-            document.querySelectorAll('[data-ambient]').forEach(btn => {
-                btn.addEventListener('click', () => {
-                    const type = btn.dataset.ambient;
-                    const enabled = state.preferences.ambient[type];
-                    state.preferences.ambient[type] = !enabled;
-                    updateToggleState(btn, !enabled);
-                    savePreferences();
-                    if (!enabled) ensureAudioContext();
-                    toggleAmbient(type, !enabled);
-                });
+            UI.backgroundToggle.addEventListener('click', () => {
+                ensureAudioContext();
+
+                // Stop current ambient if any
+                if (activeAmbientType) {
+                    toggleAmbient(activeAmbientType, false);
+                }
+
+                // Cycle: off → fire → water → nature → off
+                if (!activeAmbientType) {
+                    activeAmbientType = AMBIENT_CYCLE[0];
+                } else {
+                    const idx = AMBIENT_CYCLE.indexOf(activeAmbientType);
+                    if (idx >= AMBIENT_CYCLE.length - 1) {
+                        activeAmbientType = null;
+                    } else {
+                        activeAmbientType = AMBIENT_CYCLE[idx + 1];
+                    }
+                }
+
+                if (activeAmbientType) {
+                    toggleAmbient(activeAmbientType, true);
+                    UI.backgroundToggle.textContent = activeAmbientType === 'fireplace' ? 'Fire' :
+                                                       activeAmbientType === 'waterfall' ? 'Water' : 'Nature';
+                    updateToggleState(UI.backgroundToggle, true);
+                } else {
+                    UI.backgroundToggle.textContent = 'Background';
+                    updateToggleState(UI.backgroundToggle, false);
+                }
+
+                state.preferences.ambient = activeAmbientType;
+                savePreferences();
             });
 
             // Keyboard Shortcuts
@@ -775,7 +780,10 @@
                 updateToggleState(UI.voiceToggle, false);
             }
 
-            if (!('vibrate' in navigator)) {
+            // Only show haptic on touch devices with Vibration API (Android)
+            // Desktop Chrome has vibrate but can't actually vibrate; iOS lacks it entirely
+            const isTouchDevice = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+            if (!isTouchDevice || !('vibrate' in navigator)) {
                 UI.hapticToggle.classList.add('hidden');
                 state.preferences.haptic = false;
             }
@@ -848,20 +856,13 @@
                 speechInitialized = true;
             }
 
-            // Pre-load MP3 files if MP3 mode is enabled
-            if (state.preferences.mp3) {
-                preloadMP3s();
-            }
-
             if (state.paused) {
                 state.paused = false;
                 state.phaseStartTime = performance.now() - state.accumulatedPauseTime;
-                // Start any ambient sounds that are enabled but not active
-                Object.keys(state.preferences.ambient).forEach(type => {
-                    if (state.preferences.ambient[type] && !ambientNodes[type]) {
-                        toggleAmbient(type, true);
-                    }
-                });
+                // Restart ambient sound if enabled but not active
+                if (activeAmbientType && !ambientNodes[activeAmbientType]) {
+                    toggleAmbient(activeAmbientType, true);
+                }
                 announce("Resumed.");
             } else {
                 if (state.running) return;
@@ -912,11 +913,14 @@
             if (audioContext) {
                 try { if (breathNodes.source) breathNodes.source.stop(); } catch {}
                 if (breathNodes.gain) breathNodes.gain.gain.cancelScheduledValues(audioContext.currentTime);
-                try { if (mp3CurrentSource) mp3CurrentSource.stop(); } catch {}
-                mp3CurrentSource = null;
-                Object.keys(state.preferences.ambient).forEach(type => {
-                    if (ambientNodes[type]) toggleAmbient(type, false);
-                });
+                if (activeAmbientType && ambientNodes[activeAmbientType]) {
+                    toggleAmbient(activeAmbientType, false);
+                }
+                activeAmbientType = null;
+                UI.backgroundToggle.textContent = 'Background';
+                updateToggleState(UI.backgroundToggle, false);
+                state.preferences.ambient = null;
+                savePreferences();
             }
 
             UI.shapeContainer.classList.remove('active');
@@ -977,12 +981,8 @@
                 speak(newPhase.name);
             }
 
-            if (state.preferences.breath) {
-                if (state.preferences.mp3) {
-                    playMP3Sound(newPhase.name, newPhase.duration);
-                } else if (newPhase.name === 'Inhale' || newPhase.name === 'Exhale') {
-                    playBreathSound(newPhase.duration);
-                }
+            if (state.preferences.breath && (newPhase.name === 'Inhale' || newPhase.name === 'Exhale')) {
+                playBreathSound(newPhase.duration);
             }
         }
 
@@ -1068,12 +1068,17 @@
 
             updateToggleState(UI.voiceToggle, state.preferences.voice);
             updateToggleState(UI.breathToggle, state.preferences.breath);
-            updateToggleState(UI.mp3Toggle, state.preferences.mp3);
             updateToggleState(UI.hapticToggle, state.preferences.haptic);
-            document.querySelectorAll('[data-ambient]').forEach(btn => {
-                const type = btn.dataset.ambient;
-                updateToggleState(btn, state.preferences.ambient[type]);
-            });
+
+            // Restore background toggle state
+            if (state.preferences.ambient) {
+                activeAmbientType = state.preferences.ambient;
+                UI.backgroundToggle.textContent = activeAmbientType === 'fireplace' ? 'Fire' :
+                                                   activeAmbientType === 'waterfall' ? 'Water' : 'Nature';
+                updateToggleState(UI.backgroundToggle, true);
+            } else {
+                updateToggleState(UI.backgroundToggle, false);
+            }
         }
 
         function updateToggleState(button, isActive) {
@@ -1141,57 +1146,11 @@
         }
 
         // =================================================================
-        // AUDIO — MP3
-        // =================================================================
-
-        async function preloadMP3s() {
-            if (!audioContext) return;
-            const files = ['Inhale.mp3', 'Exhale.mp3', 'Hold-1.mp3', 'Hold-2.mp3'];
-            for (const file of files) {
-                if (mp3Buffers[file]) continue;
-                try {
-                    const response = await fetch(file);
-                    const arrayBuffer = await response.arrayBuffer();
-                    mp3Buffers[file] = await audioContext.decodeAudioData(arrayBuffer);
-                } catch (e) {
-                    console.warn(`Could not load ${file}:`, e);
-                }
-            }
-        }
-
-        function playMP3Sound(phaseName, duration) {
-            if (!audioContext || !state.preferences.breath || !state.preferences.mp3) return;
-
-            try { if (mp3CurrentSource) mp3CurrentSource.stop(); } catch {}
-
-            let filename;
-            if (phaseName === 'Hold') {
-                filename = HOLD_MP3S[holdMp3Index % HOLD_MP3S.length];
-                holdMp3Index++;
-            } else {
-                filename = MP3_FILES[phaseName];
-            }
-
-            if (!filename || !mp3Buffers[filename]) return;
-
-            const source = audioContext.createBufferSource();
-            source.buffer = mp3Buffers[filename];
-
-            const gain = audioContext.createGain();
-            gain.gain.setValueAtTime(0, audioContext.currentTime);
-            gain.gain.linearRampToValueAtTime(0.4, audioContext.currentTime + 0.2);
-            gain.gain.linearRampToValueAtTime(0, audioContext.currentTime + Math.min(duration, source.buffer.duration) - 0.3);
-
-            source.connect(gain).connect(audioContext.destination);
-            source.start();
-            source.stop(audioContext.currentTime + Math.min(duration, source.buffer.duration));
-
-            mp3CurrentSource = source;
-        }
-
-        // =================================================================
         // AUDIO — Ambient
         // =================================================================
+
+        const AMBIENT_CYCLE = ['fireplace', 'waterfall', 'nature'];
+        let activeAmbientType = null;
 
         // Reusable noise buffer (generate once, share across ambient sounds)
         let sharedNoiseBuffer = null;
@@ -1523,8 +1482,6 @@
             if (audioContext) {
                 try { if (breathNodes.source) breathNodes.source.stop(); } catch {}
                 if (breathNodes.gain) breathNodes.gain.gain.cancelScheduledValues(audioContext.currentTime);
-                try { if (mp3CurrentSource) mp3CurrentSource.stop(); } catch {}
-                mp3CurrentSource = null;
             }
 
             // Calculate stats
@@ -1589,11 +1546,14 @@
             if (summary) summary.remove();
 
             // Stop ambient sounds
-            if (audioContext) {
-                Object.keys(state.preferences.ambient).forEach(type => {
-                    if (ambientNodes[type]) toggleAmbient(type, false);
-                });
+            if (audioContext && activeAmbientType && ambientNodes[activeAmbientType]) {
+                toggleAmbient(activeAmbientType, false);
             }
+            activeAmbientType = null;
+            UI.backgroundToggle.textContent = 'Background';
+            updateToggleState(UI.backgroundToggle, false);
+            state.preferences.ambient = null;
+            savePreferences();
 
             // Full reset
             state.running = false;
@@ -1619,11 +1579,6 @@
             if (toggleEl) updateToggleState(toggleEl, state.preferences[key]);
             savePreferences();
 
-            // If MP3 or breath mode was just enabled, ensure audio is ready
-            if (key === 'mp3' && state.preferences.mp3) {
-                ensureAudioContext();
-                preloadMP3s();
-            }
             if (key === 'breath' && state.preferences.breath) {
                 ensureAudioContext();
             }
@@ -1647,10 +1602,14 @@
                     if (parsed.sessionDuration) {
                         state.sessionDuration = parsed.sessionDuration;
                     }
+                    // Migrate old ambient format (object) to new (string|null)
+                    if (parsed.ambient && typeof parsed.ambient === 'object') {
+                        const activeType = Object.keys(parsed.ambient).find(k => parsed.ambient[k]);
+                        parsed.ambient = activeType || null;
+                    }
                     state.preferences = {
                         ...state.preferences,
-                        ...parsed,
-                        ambient: { ...state.preferences.ambient, ...(parsed.ambient || {}) }
+                        ...parsed
                     };
                     // Clean non-preference keys from preferences object
                     delete state.preferences.sessionDuration;

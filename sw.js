@@ -1,15 +1,11 @@
-const CACHE_NAME = 'breathe-v3';
+const CACHE_NAME = 'breathe-v4';
 const ASSETS = [
   './',
   './TriBoxBreathing.html',
   './manifest.json',
   './icon-180.png',
   './icon-192.png',
-  './icon-512.png',
-  './Inhale.mp3',
-  './Exhale.mp3',
-  './Hold-1.mp3',
-  './Hold-2.mp3'
+  './icon-512.png'
 ];
 
 // Install: pre-cache all static assets
