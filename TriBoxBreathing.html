@@ -1,0 +1,1130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>Guided Breathing</title>
+
+    <!-- PWA -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#0a0f1a">
+
+    <!-- iOS PWA -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Breathe">
+    <link rel="apple-touch-icon" href="icon-180.png">
+
+    <!-- Typography -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300;1,400&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+
+    <style>
+        :root {
+            --bg-color: #0a0f1a;
+            --bg-mid: #111827;
+            --container-bg: rgba(255, 255, 255, 0.035);
+            --container-border: rgba(255, 255, 255, 0.06);
+            --fg-color: #e8e6e3;
+            --fg-muted: #7a776f;
+            --primary-color: #7eb8a8;
+            --secondary-color: #c4a882;
+            --accent-color: #a8c5b8;
+            --inhale-color: #7eb8a8;
+            --exhale-color: #b8937a;
+            --hold-color: #8b9dc3;
+            --inactive-color: #2a2f3a;
+            --glow-sage: rgba(126, 184, 168, 0.35);
+            --glow-terracotta: rgba(184, 147, 122, 0.35);
+            --glow-blue: rgba(139, 157, 195, 0.35);
+            --font-display: 'Cormorant Garamond', 'Georgia', serif;
+            --font-ui: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+            --radius-sm: 12px;
+            --radius-lg: 20px;
+            --radius-pill: 999px;
+            --transition-smooth: 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        *, *::before, *::after {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        html {
+            height: 100%;
+        }
+
+        body {
+            font-family: var(--font-ui);
+            min-height: 100dvh;
+            background: radial-gradient(ellipse at 50% 30%, var(--bg-mid) 0%, var(--bg-color) 70%);
+            color: var(--fg-color);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: env(safe-area-inset-top, 0.75rem) env(safe-area-inset-right, 0.75rem) env(safe-area-inset-bottom, 0.75rem) env(safe-area-inset-left, 0.75rem);
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+            overflow-y: auto;
+        }
+
+        /* Noise texture overlay */
+        body::after {
+            content: '';
+            position: fixed;
+            inset: 0;
+            opacity: 0.025;
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+            background-repeat: repeat;
+            background-size: 256px 256px;
+            pointer-events: none;
+            z-index: 9999;
+        }
+
+        /* --- App Container --- */
+        .app-container {
+            width: 100%;
+            max-width: 420px;
+            min-height: 100dvh;
+            background: var(--container-bg);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid var(--container-border);
+            border-radius: 0;
+            display: flex;
+            flex-direction: column;
+            padding: 1.5rem;
+            animation: fadeIn 0.8s ease-out;
+        }
+
+        @supports (min-height: 100dvh) {
+            .app-container {
+                min-height: 100dvh;
+            }
+        }
+
+        /* On larger screens, show as a card */
+        @media (min-width: 480px) {
+            .app-container {
+                min-height: auto;
+                height: 95vh;
+                max-height: 780px;
+                border-radius: var(--radius-lg);
+                box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4), 0 0 80px rgba(126, 184, 168, 0.05);
+            }
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: scale(0.98); }
+            to { opacity: 1; transform: scale(1); }
+        }
+
+        /* --- Mode Switcher --- */
+        .mode-switcher {
+            display: flex;
+            justify-content: center;
+            margin-bottom: 1.25rem;
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            border-radius: var(--radius-pill);
+            padding: 4px;
+            position: relative;
+        }
+
+        .mode-btn {
+            flex: 1;
+            padding: 0.7rem 1rem;
+            font-family: var(--font-ui);
+            font-size: 0.875rem;
+            font-weight: 500;
+            letter-spacing: 0.3px;
+            background: transparent;
+            color: var(--fg-muted);
+            border: none;
+            border-radius: var(--radius-pill);
+            cursor: pointer;
+            transition: color var(--transition-smooth), background var(--transition-smooth);
+            min-height: 48px;
+            position: relative;
+            z-index: 1;
+        }
+
+        .mode-btn:focus-visible {
+            outline: 2px solid var(--primary-color);
+            outline-offset: 2px;
+        }
+
+        .mode-btn.active {
+            background: rgba(126, 184, 168, 0.15);
+            color: var(--primary-color);
+            font-weight: 600;
+        }
+
+        /* --- Breathing Display --- */
+        .breathing-display {
+            flex: 1;
+            display: grid;
+            place-items: center;
+            position: relative;
+            min-height: 280px;
+        }
+
+        .shape-container {
+            position: relative;
+            width: 240px;
+            height: 240px;
+        }
+
+        .shape-svg {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            transform: rotate(-90deg);
+            overflow: visible;
+        }
+
+        #triangle-svg {
+            transform: rotate(-150deg);
+        }
+
+        .shape-track {
+            stroke: var(--inactive-color);
+            stroke-width: 4;
+            fill: none;
+            opacity: 0.5;
+        }
+
+        .shape-progress {
+            stroke: var(--primary-color);
+            stroke-width: 6;
+            fill: none;
+            stroke-linecap: round;
+            transition: stroke-dashoffset 0.15s linear, stroke 0.6s ease;
+            filter: url(#glow);
+        }
+
+        .display-text {
+            position: absolute;
+            text-align: center;
+            user-select: none;
+            pointer-events: none;
+        }
+
+        #phase-label {
+            font-family: var(--font-display);
+            font-size: 1.5rem;
+            font-weight: 400;
+            font-style: italic;
+            letter-spacing: 3px;
+            color: var(--primary-color);
+            text-transform: uppercase;
+            transition: color 0.6s ease;
+        }
+
+        #countdown-timer {
+            font-family: var(--font-display);
+            font-size: 5.5rem;
+            font-weight: 300;
+            line-height: 1;
+            margin-top: 0.5rem;
+            color: var(--fg-color);
+            transition: text-shadow 0.6s ease;
+        }
+
+        .hidden { display: none !important; }
+
+        /* Breathing pulse animation on the shape container */
+        @keyframes breathePulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.02); }
+        }
+
+        .shape-container.active {
+            animation: breathePulse 4s ease-in-out infinite;
+        }
+
+        /* --- Controls --- */
+        .controls-section {
+            padding-top: 0.5rem;
+        }
+
+        .controls, .toggles, .ambient-toggles {
+            display: flex;
+            justify-content: center;
+            gap: 0.75rem;
+            flex-wrap: wrap;
+        }
+
+        .controls {
+            margin-bottom: 1.25rem;
+        }
+
+        .toggles {
+            margin-bottom: 0.75rem;
+        }
+
+        .ambient-toggles {
+            margin-bottom: 0.75rem;
+        }
+
+        .btn, .toggle-btn {
+            font-family: var(--font-ui);
+            font-size: 0.875rem;
+            font-weight: 500;
+            letter-spacing: 0.4px;
+            padding: 0.75rem 1.75rem;
+            border-radius: var(--radius-pill);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            cursor: pointer;
+            min-height: 48px;
+            min-width: 90px;
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            transition: all var(--transition-smooth);
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        .btn:active, .toggle-btn:active {
+            transform: scale(0.96);
+        }
+
+        .btn:focus-visible, .toggle-btn:focus-visible {
+            outline: 2px solid var(--primary-color);
+            outline-offset: 2px;
+        }
+
+        #start-btn {
+            background: rgba(126, 184, 168, 0.2);
+            color: var(--primary-color);
+            border-color: rgba(126, 184, 168, 0.3);
+        }
+
+        #start-btn:hover {
+            background: rgba(126, 184, 168, 0.3);
+            box-shadow: 0 0 20px rgba(126, 184, 168, 0.15);
+        }
+
+        #pause-btn {
+            background: rgba(196, 168, 130, 0.2);
+            color: var(--secondary-color);
+            border-color: rgba(196, 168, 130, 0.3);
+        }
+
+        #stop-btn {
+            background: rgba(184, 130, 130, 0.15);
+            color: #c49090;
+            border-color: rgba(184, 130, 130, 0.2);
+        }
+
+        #stop-btn:disabled {
+            opacity: 0.3;
+            cursor: not-allowed;
+        }
+
+        .toggle-btn {
+            background: rgba(255, 255, 255, 0.04);
+            color: var(--fg-muted);
+            font-size: 0.8rem;
+            padding: 0.6rem 1.25rem;
+            min-width: 70px;
+        }
+
+        .toggle-btn[aria-pressed="true"] {
+            background: rgba(126, 184, 168, 0.15);
+            color: var(--primary-color);
+            border-color: rgba(126, 184, 168, 0.3);
+        }
+
+        /* --- Footer --- */
+        footer {
+            text-align: center;
+            color: var(--fg-muted);
+            font-size: 0.8rem;
+            padding-top: 0.75rem;
+        }
+
+        .streak-display {
+            margin-bottom: 0.4rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.4rem;
+            min-height: 20px;
+            font-family: var(--font-display);
+            font-size: 1rem;
+            color: var(--secondary-color);
+        }
+
+        #total-time {
+            font-size: 0.75rem;
+            color: var(--fg-muted);
+            opacity: 0.7;
+        }
+
+        .help-text {
+            margin-top: 0.4rem;
+            font-size: 0.7rem;
+            opacity: 0.4;
+            letter-spacing: 0.5px;
+        }
+
+        /* --- Accessibility --- */
+        .sr-only {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            padding: 0;
+            margin: -1px;
+            overflow: hidden;
+            clip: rect(0, 0, 0, 0);
+            white-space: nowrap;
+            border-width: 0;
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            .shape-progress {
+                transition: none;
+            }
+            .app-container {
+                animation: none;
+            }
+            .shape-container.active {
+                animation: none;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <main class="app-container">
+        <header class="mode-switcher">
+            <button id="box-mode-btn" class="mode-btn active" data-mode="box">4 x 4 Box</button>
+            <button id="triangle-mode-btn" class="mode-btn" data-mode="triangle">4-7-8 Triangle</button>
+        </header>
+
+        <section class="breathing-display">
+            <div id="shape-container" class="shape-container">
+                <!-- Shared SVG filter for glow effect -->
+                <svg style="position:absolute;width:0;height:0">
+                    <defs>
+                        <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+                            <feGaussianBlur in="SourceGraphic" stdDeviation="3" result="blur"/>
+                            <feMerge>
+                                <feMergeNode in="blur"/>
+                                <feMergeNode in="SourceGraphic"/>
+                            </feMerge>
+                        </filter>
+                    </defs>
+                </svg>
+
+                <svg id="box-svg" class="shape-svg" viewBox="0 0 100 100">
+                    <path class="shape-track" d="M 5,5 L 95,5 L 95,95 L 5,95 Z" />
+                    <path id="box-progress" class="shape-progress" d="M 5,5 L 95,5 L 95,95 L 5,95 Z" />
+                </svg>
+                <svg id="triangle-svg" class="shape-svg hidden" viewBox="0 0 100 100">
+                    <path class="shape-track" d="M 50,5 L 95,82 L 5,82 Z" />
+                    <path id="triangle-progress" class="shape-progress" d="M 50,5 L 95,82 L 5,82 Z" />
+                </svg>
+            </div>
+            <div class="display-text">
+                <div id="phase-label">Ready</div>
+                <div id="countdown-timer"></div>
+            </div>
+        </section>
+
+        <section class="controls-section">
+            <div id="main-controls" class="controls">
+                <button id="start-btn" class="btn">Start</button>
+                <button id="pause-btn" class="btn hidden">Pause</button>
+                <button id="stop-btn" class="btn" disabled>Stop</button>
+            </div>
+            <div class="toggles">
+                <button id="voice-toggle" class="toggle-btn" aria-pressed="false" title="Toggle Voice Cues">Voice</button>
+                <button id="breath-toggle" class="toggle-btn" aria-pressed="false" title="Toggle Breath Sound">Breath</button>
+                <button id="mp3-toggle" class="toggle-btn" aria-pressed="false" title="Use MP3 audio instead of synthetic">MP3</button>
+            </div>
+            <div id="ambient-toggles" class="ambient-toggles">
+                <button class="toggle-btn" data-ambient="fireplace" aria-pressed="false" title="Fireplace">Fire</button>
+                <button class="toggle-btn" data-ambient="waterfall" aria-pressed="false" title="Waterfall">Water</button>
+                <button class="toggle-btn" data-ambient="nature" aria-pressed="false" title="Nature">Nature</button>
+            </div>
+        </section>
+
+        <footer>
+            <div class="streak-display">
+                <span id="streak-counter"></span>
+            </div>
+            <div id="total-time">0s</div>
+            <p class="help-text">Space: Start / Pause &middot; S: Stop</p>
+        </footer>
+    </main>
+
+    <div id="announcer" class="sr-only" aria-live="assertive" aria-atomic="true"></div>
+
+    <script type="module">
+        // --- DATA LAYER ---
+        const PHASES = {
+            box: [
+                { name: 'Inhale', duration: 4 },
+                { name: 'Hold', duration: 4 },
+                { name: 'Exhale', duration: 4 },
+                { name: 'Hold', duration: 4 }
+            ],
+            triangle: [
+                { name: 'Inhale', duration: 4 },
+                { name: 'Hold', duration: 7 },
+                { name: 'Exhale', duration: 8 }
+            ]
+        };
+
+        // Phase-to-color mapping for dynamic stroke + label color
+        const PHASE_COLORS = {
+            'Inhale': { color: 'var(--inhale-color)', glow: 'var(--glow-sage)' },
+            'Exhale': { color: 'var(--exhale-color)', glow: 'var(--glow-terracotta)' },
+            'Hold':   { color: 'var(--hold-color)',   glow: 'var(--glow-blue)' }
+        };
+
+        // MP3 file mapping
+        const MP3_FILES = {
+            'Inhale': 'Inhale.mp3',
+            'Exhale': 'Exhale.mp3',
+            'Hold':   null  // Will alternate between Hold-1 and Hold-2
+        };
+        const HOLD_MP3S = ['Hold-1.mp3', 'Hold-2.mp3'];
+        let holdMp3Index = 0;
+
+        const PREF_KEY = 'breathingAppPrefs';
+        const MAX_STREAK_ICONS = 10;
+
+        // --- STATE ---
+        let state = {
+            mode: 'box',
+            running: false,
+            paused: false,
+            phaseIndex: 0,
+            phaseStartTime: 0,
+            accumulatedPauseTime: 0,
+            animationFrameId: null,
+            lastFrameTime: null,
+            cycleCount: 0,
+            totalTime: 0,
+            preferences: {
+                voice: true,
+                breath: true,
+                mp3: false,
+                ambient: { fireplace: false, waterfall: false, nature: false }
+            }
+        };
+
+        // --- UI ELEMENTS ---
+        const UI = {
+            phaseLabel: document.getElementById('phase-label'),
+            countdownTimer: document.getElementById('countdown-timer'),
+            startBtn: document.getElementById('start-btn'),
+            pauseBtn: document.getElementById('pause-btn'),
+            stopBtn: document.getElementById('stop-btn'),
+            voiceToggle: document.getElementById('voice-toggle'),
+            breathToggle: document.getElementById('breath-toggle'),
+            mp3Toggle: document.getElementById('mp3-toggle'),
+            announcer: document.getElementById('announcer'),
+            streakCounter: document.getElementById('streak-counter'),
+            totalTimeDisplay: document.getElementById('total-time'),
+            boxSVG: document.getElementById('box-svg'),
+            triangleSVG: document.getElementById('triangle-svg'),
+            boxProgress: document.getElementById('box-progress'),
+            triangleProgress: document.getElementById('triangle-progress'),
+            ambientToggles: document.getElementById('ambient-toggles'),
+            shapeContainer: document.getElementById('shape-container'),
+            modeBtns: document.querySelectorAll('.mode-btn')
+        };
+
+        // --- AUDIO ---
+        let audioContext;
+        let breathNodes = {};
+        let ambientNodes = {};
+        let mp3Buffers = {};
+        let mp3CurrentSource = null;
+        const isSpeechSupported = 'speechSynthesis' in window;
+        let speechInitialized = false;
+        let voices = [];
+
+        // --- SVG PATH LENGTHS ---
+        const pathLengths = {
+            box: UI.boxProgress.getTotalLength(),
+            triangle: UI.triangleProgress.getTotalLength()
+        };
+
+        // =================================================================
+        // CORE LOGIC
+        // =================================================================
+
+        function init() {
+            primeSpeechSynthesis();
+
+            // Event Listeners
+            UI.startBtn.addEventListener('click', startBreathing);
+            UI.pauseBtn.addEventListener('click', pauseBreathing);
+            UI.stopBtn.addEventListener('click', stopBreathing);
+
+            UI.modeBtns.forEach(btn => {
+                btn.addEventListener('click', () => setMode(btn.dataset.mode));
+            });
+
+            UI.voiceToggle.addEventListener('click', () => togglePreference('voice'));
+            UI.breathToggle.addEventListener('click', () => togglePreference('breath'));
+            UI.mp3Toggle.addEventListener('click', () => togglePreference('mp3'));
+
+            document.querySelectorAll('[data-ambient]').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const type = btn.dataset.ambient;
+                    const enabled = state.preferences.ambient[type];
+                    state.preferences.ambient[type] = !enabled;
+                    updateToggleState(btn, !enabled);
+                    savePreferences();
+                    toggleAmbient(type, !enabled);
+                });
+            });
+
+            // Keyboard Shortcuts
+            window.addEventListener('keydown', e => {
+                if (e.code === 'Space') {
+                    e.preventDefault();
+                    if (state.running && !state.paused) pauseBreathing();
+                    else startBreathing();
+                } else if (e.code === 'KeyS' && state.running) {
+                    e.preventDefault();
+                    stopBreathing();
+                }
+            });
+
+            loadPreferences();
+            updateUIForState();
+            resetUI();
+
+            if (!isSpeechSupported) {
+                UI.voiceToggle.disabled = true;
+                UI.voiceToggle.title = "Speech Synthesis not supported by your browser.";
+                state.preferences.voice = false;
+                updateToggleState(UI.voiceToggle, false);
+            }
+
+            // Register service worker for PWA
+            if ('serviceWorker' in navigator) {
+                navigator.serviceWorker.register('sw.js').catch(() => {});
+            }
+        }
+
+        function mainLoop(timestamp) {
+            if (!state.running || state.paused) return;
+
+            const currentPhase = PHASES[state.mode][state.phaseIndex];
+            const elapsedSincePhaseStart = (timestamp - state.phaseStartTime) / 1000;
+
+            if (elapsedSincePhaseStart >= currentPhase.duration) {
+                advancePhase();
+            } else {
+                updateUI(elapsedSincePhaseStart);
+            }
+
+            const lastTime = state.lastFrameTime ?? timestamp;
+            state.totalTime += (timestamp - lastTime) / 1000;
+            state.lastFrameTime = timestamp;
+            UI.totalTimeDisplay.textContent = formatTime(state.totalTime);
+
+            state.animationFrameId = requestAnimationFrame(mainLoop);
+        }
+
+        function formatTime(seconds) {
+            const m = Math.floor(seconds / 60);
+            const s = Math.floor(seconds % 60);
+            return m > 0 ? `${m}m ${s}s` : `${s}s`;
+        }
+
+        function startBreathing() {
+            if (!audioContext) {
+                try {
+                    audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                } catch (e) {
+                    console.error("Web Audio API is not supported.");
+                    UI.breathToggle.disabled = true;
+                    return;
+                }
+            }
+            if (audioContext.state === 'suspended') {
+                audioContext.resume();
+            }
+
+            if (isSpeechSupported && !speechInitialized) {
+                speechSynthesis.speak(new SpeechSynthesisUtterance(''));
+                speechInitialized = true;
+            }
+
+            // Pre-load MP3 files if MP3 mode is enabled
+            if (state.preferences.mp3) {
+                preloadMP3s();
+            }
+
+            if (state.paused) {
+                state.paused = false;
+                state.phaseStartTime = performance.now() - state.accumulatedPauseTime;
+                announce("Resumed.");
+            } else {
+                if (state.running) return;
+                state.phaseIndex = -1;
+                advancePhase();
+            }
+
+            state.running = true;
+            state.lastFrameTime = performance.now();
+            UI.shapeContainer.classList.add('active');
+            state.animationFrameId = requestAnimationFrame(mainLoop);
+            updateUIForState();
+        }
+
+        function pauseBreathing() {
+            if (!state.running || state.paused) return;
+            state.paused = true;
+            state.accumulatedPauseTime = performance.now() - state.phaseStartTime;
+            cancelAnimationFrame(state.animationFrameId);
+
+            if (breathNodes.gain) {
+                breathNodes.gain.gain.cancelScheduledValues(audioContext.currentTime);
+            }
+
+            updateUIForState();
+            announce("Paused.");
+        }
+
+        function stopBreathing() {
+            if (!state.running) return;
+            state.running = false;
+            state.paused = false;
+            cancelAnimationFrame(state.animationFrameId);
+            state.animationFrameId = null;
+
+            state.cycleCount = 0;
+            state.totalTime = 0;
+
+            if (audioContext) {
+                try { if (breathNodes.source) breathNodes.source.stop(); } catch {}
+                if (breathNodes.gain) breathNodes.gain.gain.cancelScheduledValues(audioContext.currentTime);
+                try { if (mp3CurrentSource) mp3CurrentSource.stop(); } catch {}
+                mp3CurrentSource = null;
+                Object.keys(state.preferences.ambient).forEach(type => {
+                    if (ambientNodes[type]) toggleAmbient(type, false);
+                });
+            }
+
+            UI.shapeContainer.classList.remove('active');
+            resetUI();
+            updateUIForState();
+            announce("Session stopped.");
+        }
+
+        function setMode(newMode) {
+            if (newMode === state.mode) return;
+            if (state.running) stopBreathing();
+
+            state.mode = newMode;
+
+            UI.boxSVG.classList.toggle('hidden', state.mode !== 'box');
+            UI.triangleSVG.classList.toggle('hidden', state.mode === 'box');
+
+            updateUIForState();
+            resetUI();
+        }
+
+        function advancePhase() {
+            state.phaseIndex++;
+            if (state.phaseIndex >= PHASES[state.mode].length) {
+                state.phaseIndex = 0;
+                incrementCycle();
+            }
+
+            const newPhase = PHASES[state.mode][state.phaseIndex];
+            state.phaseStartTime = performance.now();
+            state.accumulatedPauseTime = 0;
+
+            UI.phaseLabel.textContent = newPhase.name;
+            announce(`${newPhase.name} for ${newPhase.duration} seconds.`);
+
+            // Update colors based on phase
+            const phaseStyle = PHASE_COLORS[newPhase.name];
+            if (phaseStyle) {
+                const progressEl = state.mode === 'box' ? UI.boxProgress : UI.triangleProgress;
+                progressEl.style.stroke = phaseStyle.color;
+                UI.phaseLabel.style.color = phaseStyle.color;
+                UI.countdownTimer.style.textShadow = `0 0 30px ${phaseStyle.glow}`;
+            }
+
+            if (state.preferences.voice) {
+                speak(newPhase.name);
+            }
+
+            if (state.preferences.breath) {
+                if (state.preferences.mp3) {
+                    playMP3Sound(newPhase.name, newPhase.duration);
+                } else if (newPhase.name === 'Inhale' || newPhase.name === 'Exhale') {
+                    playBreathSound(newPhase.duration);
+                }
+            }
+        }
+
+        function incrementCycle() {
+            state.cycleCount++;
+            if (state.cycleCount <= MAX_STREAK_ICONS) {
+                UI.streakCounter.textContent = '\u{1F525}'.repeat(state.cycleCount);
+            } else {
+                UI.streakCounter.textContent = `\u{1F525} \u00D7${state.cycleCount}`;
+            }
+        }
+
+        // =================================================================
+        // UI & VISUALS
+        // =================================================================
+
+        function updateUI(elapsed) {
+            const currentPhase = PHASES[state.mode][state.phaseIndex];
+            const progress = Math.min(elapsed / currentPhase.duration, 1.0);
+
+            UI.countdownTimer.textContent = Math.ceil(currentPhase.duration - elapsed);
+
+            const isReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+            updateShapeProgress(isReducedMotion ? 1 : progress);
+        }
+
+        function updateShapeProgress(progress) {
+            const totalLength = pathLengths[state.mode];
+            const phaseCount = PHASES[state.mode].length;
+            const segmentLength = totalLength / phaseCount;
+
+            const startOffset = totalLength - (state.phaseIndex * segmentLength);
+            const currentOffset = startOffset - (progress * segmentLength);
+
+            const progressEl = state.mode === 'box' ? UI.boxProgress : UI.triangleProgress;
+            progressEl.style.strokeDasharray = `${totalLength}`;
+            progressEl.style.strokeDashoffset = `${currentOffset}`;
+        }
+
+        function resetUI() {
+            UI.phaseLabel.textContent = 'Ready';
+            UI.phaseLabel.style.color = '';
+            UI.countdownTimer.textContent = '';
+            UI.countdownTimer.style.textShadow = '';
+            UI.streakCounter.textContent = '';
+            UI.totalTimeDisplay.textContent = '0s';
+
+            const progressEl = state.mode === 'box' ? UI.boxProgress : UI.triangleProgress;
+            const totalLength = pathLengths[state.mode];
+            progressEl.style.strokeDasharray = `${totalLength}`;
+            progressEl.style.strokeDashoffset = `${totalLength}`;
+            progressEl.style.stroke = '';
+        }
+
+        function updateUIForState() {
+            UI.startBtn.classList.toggle('hidden', state.running && !state.paused);
+            UI.pauseBtn.classList.toggle('hidden', !state.running || state.paused);
+            UI.stopBtn.disabled = !state.running;
+
+            UI.modeBtns.forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.mode === state.mode);
+            });
+
+            updateToggleState(UI.voiceToggle, state.preferences.voice);
+            updateToggleState(UI.breathToggle, state.preferences.breath);
+            updateToggleState(UI.mp3Toggle, state.preferences.mp3);
+            document.querySelectorAll('[data-ambient]').forEach(btn => {
+                const type = btn.dataset.ambient;
+                updateToggleState(btn, state.preferences.ambient[type]);
+            });
+        }
+
+        function updateToggleState(button, isActive) {
+            button.setAttribute('aria-pressed', isActive);
+        }
+
+        // =================================================================
+        // AUDIO — Synthetic
+        // =================================================================
+
+        function primeSpeechSynthesis() {
+            if (!isSpeechSupported) return;
+            speechSynthesis.onvoiceschanged = () => {
+                voices = speechSynthesis.getVoices();
+            };
+            voices = speechSynthesis.getVoices();
+        }
+
+        function speak(text) {
+            if (!isSpeechSupported || !state.preferences.voice) return;
+
+            speechSynthesis.cancel();
+            const utterance = new SpeechSynthesisUtterance(text);
+            utterance.rate = 0.9;
+            utterance.pitch = 0.9;
+
+            if (voices.length > 0) {
+                const selectedVoice = voices.find(v => v.name === 'Google US English') ||
+                                      voices.find(v => v.lang === 'en-US');
+                if (selectedVoice) utterance.voice = selectedVoice;
+            }
+
+            speechSynthesis.speak(utterance);
+        }
+
+        function playBreathSound(duration) {
+            if (!audioContext || !state.preferences.breath) return;
+
+            try { if (breathNodes.source) breathNodes.source.stop(); } catch {}
+
+            const bufferSize = audioContext.sampleRate * duration;
+            const buffer = audioContext.createBuffer(1, bufferSize, audioContext.sampleRate);
+            const data = buffer.getChannelData(0);
+            for (let i = 0; i < bufferSize; i++) {
+                data[i] = Math.random() * 2 - 1;
+            }
+            const source = audioContext.createBufferSource();
+            source.buffer = buffer;
+            source.loop = true;
+
+            const filter = audioContext.createBiquadFilter();
+            filter.type = 'lowpass';
+            filter.frequency.value = 800;
+
+            const gain = audioContext.createGain();
+            gain.gain.setValueAtTime(0, audioContext.currentTime);
+            gain.gain.linearRampToValueAtTime(0.1, audioContext.currentTime + 0.15);
+            gain.gain.linearRampToValueAtTime(0, audioContext.currentTime + duration - 0.25);
+
+            source.connect(filter).connect(gain).connect(audioContext.destination);
+            source.start();
+            source.stop(audioContext.currentTime + duration);
+
+            breathNodes = { source, filter, gain };
+        }
+
+        // =================================================================
+        // AUDIO — MP3
+        // =================================================================
+
+        async function preloadMP3s() {
+            if (!audioContext) return;
+            const files = ['Inhale.mp3', 'Exhale.mp3', 'Hold-1.mp3', 'Hold-2.mp3'];
+            for (const file of files) {
+                if (mp3Buffers[file]) continue;
+                try {
+                    const response = await fetch(file);
+                    const arrayBuffer = await response.arrayBuffer();
+                    mp3Buffers[file] = await audioContext.decodeAudioData(arrayBuffer);
+                } catch (e) {
+                    console.warn(`Could not load ${file}:`, e);
+                }
+            }
+        }
+
+        function playMP3Sound(phaseName, duration) {
+            if (!audioContext || !state.preferences.breath || !state.preferences.mp3) return;
+
+            try { if (mp3CurrentSource) mp3CurrentSource.stop(); } catch {}
+
+            let filename;
+            if (phaseName === 'Hold') {
+                filename = HOLD_MP3S[holdMp3Index % HOLD_MP3S.length];
+                holdMp3Index++;
+            } else {
+                filename = MP3_FILES[phaseName];
+            }
+
+            if (!filename || !mp3Buffers[filename]) return;
+
+            const source = audioContext.createBufferSource();
+            source.buffer = mp3Buffers[filename];
+
+            const gain = audioContext.createGain();
+            gain.gain.setValueAtTime(0, audioContext.currentTime);
+            gain.gain.linearRampToValueAtTime(0.4, audioContext.currentTime + 0.2);
+            gain.gain.linearRampToValueAtTime(0, audioContext.currentTime + Math.min(duration, source.buffer.duration) - 0.3);
+
+            source.connect(gain).connect(audioContext.destination);
+            source.start();
+            source.stop(audioContext.currentTime + Math.min(duration, source.buffer.duration));
+
+            mp3CurrentSource = source;
+        }
+
+        // =================================================================
+        // AUDIO — Ambient
+        // =================================================================
+
+        function toggleAmbient(type, enabled) {
+            if (!audioContext) return;
+
+            if (enabled) {
+                if (ambientNodes[type]) return;
+
+                let source, filter, gain, lfo;
+                const spawnedSources = [];
+                let timeoutId = null;
+
+                gain = audioContext.createGain();
+                gain.gain.setValueAtTime(0, audioContext.currentTime);
+                gain.gain.linearRampToValueAtTime(0.05, audioContext.currentTime + 1.5);
+
+                const noiseSource = () => {
+                    const bufferSize = audioContext.sampleRate * 3;
+                    const buffer = audioContext.createBuffer(1, bufferSize, audioContext.sampleRate);
+                    const data = buffer.getChannelData(0);
+                    for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1;
+                    const s = audioContext.createBufferSource();
+                    s.buffer = buffer;
+                    s.loop = true;
+                    return s;
+                };
+
+                switch (type) {
+                    case 'fireplace':
+                        filter = audioContext.createBiquadFilter();
+                        filter.type = 'lowpass';
+                        filter.frequency.value = 400;
+                        source = noiseSource();
+                        source.connect(filter).connect(gain).connect(audioContext.destination);
+                        source.start();
+                        const crackle = () => {
+                            const entry = ambientNodes[type];
+                            if (!entry) return;
+                            const crackleGain = audioContext.createGain();
+                            crackleGain.gain.setValueAtTime(0.2, audioContext.currentTime);
+                            crackleGain.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 0.05);
+                            const crackleNoise = noiseSource();
+                            crackleNoise.loop = false;
+                            const crackleBuffer = audioContext.createBuffer(1, audioContext.sampleRate * 0.05, audioContext.sampleRate);
+                            const cd = crackleBuffer.getChannelData(0);
+                            for (let i = 0; i < cd.length; i++) cd[i] = Math.random() * 2 - 1;
+                            crackleNoise.buffer = crackleBuffer;
+                            crackleNoise.connect(crackleGain).connect(gain);
+                            crackleNoise.start();
+                            entry.spawnedSources.push(crackleNoise);
+                            entry.timeoutId = setTimeout(crackle, 2000 + Math.random() * 3000);
+                        };
+                        timeoutId = setTimeout(crackle, 1000 + Math.random() * 2000);
+                        break;
+
+                    case 'waterfall':
+                        filter = audioContext.createBiquadFilter();
+                        filter.type = 'lowpass';
+                        filter.Q.value = 5;
+                        lfo = audioContext.createOscillator();
+                        lfo.type = 'sine';
+                        lfo.frequency.value = 0.3;
+                        const lfoGain = audioContext.createGain();
+                        lfoGain.gain.value = 200;
+                        filter.frequency.value = 600;
+                        lfo.connect(lfoGain).connect(filter.frequency);
+                        source = noiseSource();
+                        source.connect(filter).connect(gain).connect(audioContext.destination);
+                        source.start();
+                        lfo.start();
+                        break;
+
+                    case 'nature':
+                        filter = audioContext.createBiquadFilter();
+                        filter.type = 'bandpass';
+                        filter.frequency.value = 1000;
+                        filter.Q.value = 2;
+                        source = noiseSource();
+                        source.connect(filter).connect(gain).connect(audioContext.destination);
+                        source.start();
+                        const chirp = () => {
+                            const entry = ambientNodes[type];
+                            if (!entry) return;
+                            const osc = audioContext.createOscillator();
+                            const chirpGain = audioContext.createGain();
+                            osc.type = 'sine';
+                            osc.frequency.setValueAtTime(1500 + Math.random() * 500, audioContext.currentTime);
+                            chirpGain.gain.setValueAtTime(0.1, audioContext.currentTime);
+                            chirpGain.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 0.2);
+                            osc.connect(chirpGain).connect(gain);
+                            osc.start();
+                            osc.stop(audioContext.currentTime + 0.2);
+                            entry.timeoutId = setTimeout(chirp, 3000 + Math.random() * 4000);
+                        };
+                        timeoutId = setTimeout(chirp, 1000 + Math.random() * 2000);
+                        break;
+                }
+
+                ambientNodes[type] = { source, filter, gain, lfo, spawnedSources, timeoutId };
+
+            } else {
+                const nodes = ambientNodes[type];
+                if (!nodes) return;
+
+                // Clear any pending timeout immediately
+                if (nodes.timeoutId) clearTimeout(nodes.timeoutId);
+
+                nodes.gain.gain.cancelScheduledValues(audioContext.currentTime);
+                nodes.gain.gain.linearRampToValueAtTime(0, audioContext.currentTime + 1.0);
+
+                // Stop all spawned sources
+                for (const s of nodes.spawnedSources) {
+                    try { s.stop(); } catch {}
+                }
+
+                setTimeout(() => {
+                    try { if (nodes.source) nodes.source.stop(); } catch {}
+                    try { if (nodes.lfo) nodes.lfo.stop(); } catch {}
+                    nodes.gain.disconnect();
+                }, 1000);
+
+                delete ambientNodes[type];
+            }
+        }
+
+        // =================================================================
+        // UTILITIES & PERSISTENCE
+        // =================================================================
+
+        function announce(message) {
+            UI.announcer.textContent = message;
+        }
+
+        function togglePreference(key) {
+            state.preferences[key] = !state.preferences[key];
+            const toggleEl = UI[`${key}Toggle`];
+            if (toggleEl) updateToggleState(toggleEl, state.preferences[key]);
+            savePreferences();
+
+            // If MP3 mode was just enabled, preload the files
+            if (key === 'mp3' && state.preferences.mp3 && audioContext) {
+                preloadMP3s();
+            }
+        }
+
+        function savePreferences() {
+            try {
+                localStorage.setItem(PREF_KEY, JSON.stringify(state.preferences));
+            } catch {}
+        }
+
+        function loadPreferences() {
+            try {
+                const savedPrefs = localStorage.getItem(PREF_KEY);
+                if (savedPrefs) {
+                    const parsed = JSON.parse(savedPrefs);
+                    state.preferences = {
+                        ...state.preferences,
+                        ...parsed,
+                        ambient: { ...state.preferences.ambient, ...(parsed.ambient || {}) }
+                    };
+                }
+            } catch {}
+        }
+
+        // --- Initialize ---
+        init();
+    </script>
+</body>
+</html>

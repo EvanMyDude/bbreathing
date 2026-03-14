@@ -1,0 +1,5 @@
+.DS_Store
+firebase-debug.log
+.claude/
+preview-*.png
+.playwright-mcp/
