@@ -246,7 +246,7 @@
             padding-top: 0.5rem;
         }
 
-        .controls, .toggles, .ambient-toggles {
+        .controls, .toggles {
             display: flex;
             justify-content: center;
             gap: 0.75rem;
@@ -258,10 +258,6 @@
         }
 
         .toggles {
-            margin-bottom: 0.75rem;
-        }
-
-        .ambient-toggles {
             margin-bottom: 0.75rem;
         }
 
@@ -291,32 +287,26 @@
             outline-offset: 2px;
         }
 
-        #start-btn {
+        .action-start {
             background: rgba(126, 184, 168, 0.2);
             color: var(--primary-color);
             border-color: rgba(126, 184, 168, 0.3);
         }
 
-        #start-btn:hover {
+        .action-start:hover {
             background: rgba(126, 184, 168, 0.3);
             box-shadow: 0 0 20px rgba(126, 184, 168, 0.15);
         }
 
-        #pause-btn {
+        .action-pause {
             background: rgba(196, 168, 130, 0.2);
             color: var(--secondary-color);
             border-color: rgba(196, 168, 130, 0.3);
         }
 
-        #stop-btn {
-            background: rgba(184, 130, 130, 0.15);
-            color: #c49090;
-            border-color: rgba(184, 130, 130, 0.2);
-        }
-
-        #stop-btn:disabled {
-            opacity: 0.3;
-            cursor: not-allowed;
+        .action-pause:hover {
+            background: rgba(196, 168, 130, 0.3);
+            box-shadow: 0 0 20px rgba(196, 168, 130, 0.15);
         }
 
         .toggle-btn {
@@ -339,18 +329,6 @@
             color: var(--fg-muted);
             font-size: 0.8rem;
             padding-top: 0.75rem;
-        }
-
-        .streak-display {
-            margin-bottom: 0.4rem;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 0.4rem;
-            min-height: 20px;
-            font-family: var(--font-display);
-            font-size: 1rem;
-            color: var(--secondary-color);
         }
 
         /* --- Duration Selector --- */
@@ -403,20 +381,7 @@
             line-height: 1.2;
         }
 
-        .duration-label {
-            font-size: 0.6rem;
-            color: var(--fg-muted);
-            letter-spacing: 0.3px;
-            line-height: 1;
-            margin-top: 2px;
-        }
-
-        .duration-btn.selected .duration-label {
-            color: var(--primary-color);
-            opacity: 0.7;
-        }
-
-        /* --- Session Time & +1m --- */
+        /* --- Session Time --- */
         .session-time {
             display: flex;
             align-items: center;
@@ -427,40 +392,13 @@
             opacity: 0.7;
         }
 
-        .add-minute-btn {
-            font-family: var(--font-ui);
-            font-size: 0.7rem;
-            font-weight: 600;
-            padding: 0.25rem 0.6rem;
-            border-radius: var(--radius-pill);
-            border: 1px solid rgba(126, 184, 168, 0.3);
-            background: transparent;
-            color: var(--primary-color);
-            cursor: pointer;
-            transition: all var(--transition-smooth);
-            -webkit-tap-highlight-color: transparent;
-        }
-
-        .add-minute-btn:hover {
-            background: rgba(126, 184, 168, 0.15);
-        }
-
-        .add-minute-btn:active {
-            transform: scale(0.96);
-        }
-
-        .add-minute-btn:disabled {
-            opacity: 0.3;
-            cursor: not-allowed;
-        }
-
-        /* --- Session Summary --- */
-        .session-summary {
+        /* --- Session Complete Flash --- */
+        .session-flash {
             text-align: center;
-            animation: summaryFadeIn 0.6s ease-out;
+            animation: flashFadeIn 0.6s ease-out;
         }
 
-        .session-summary .summary-title {
+        .session-flash .flash-text {
             font-family: var(--font-display);
             font-size: 1.3rem;
             font-weight: 400;
@@ -468,25 +406,16 @@
             letter-spacing: 3px;
             color: var(--primary-color);
             text-transform: uppercase;
-            margin-bottom: 0.5rem;
         }
 
-        .session-summary .summary-stats {
-            font-family: var(--font-display);
-            font-size: 1rem;
-            color: var(--fg-muted);
-        }
-
-        @keyframes summaryFadeIn {
+        @keyframes flashFadeIn {
             from { opacity: 0; transform: translateY(8px); }
             to { opacity: 1; transform: translateY(0); }
         }
 
-        .help-text {
-            margin-top: 0.4rem;
-            font-size: 0.7rem;
-            opacity: 0.4;
-            letter-spacing: 0.5px;
+        @keyframes flashFadeOut {
+            from { opacity: 1; }
+            to { opacity: 0; }
         }
 
         /* --- Accessibility --- */
@@ -559,43 +488,30 @@
             </button>
             <button class="duration-btn" data-minutes="2">
                 <span class="duration-value">2m</span>
-                <span class="duration-label">Quick</span>
             </button>
             <button class="duration-btn" data-minutes="3">
                 <span class="duration-value">3m</span>
-                <span class="duration-label">Calm</span>
             </button>
             <button class="duration-btn selected" data-minutes="5">
                 <span class="duration-value">5m</span>
-                <span class="duration-label">Deep</span>
             </button>
         </div>
 
         <section class="controls-section">
             <div id="main-controls" class="controls">
-                <button id="start-btn" class="btn">Start</button>
-                <button id="pause-btn" class="btn hidden">Pause</button>
-                <button id="stop-btn" class="btn" disabled>Stop</button>
+                <button id="action-btn" class="btn action-start">Start</button>
             </div>
             <div class="toggles">
-                <button id="voice-toggle" class="toggle-btn" aria-pressed="false" title="Toggle Voice Cues">Voice</button>
-                <button id="breath-toggle" class="toggle-btn" aria-pressed="false" title="Toggle Breath Sound">Breath</button>
-                <button id="haptic-toggle" class="toggle-btn" aria-pressed="false" title="Toggle Haptic Feedback">Haptic</button>
-            </div>
-            <div class="ambient-toggles">
-                <button id="background-toggle" class="toggle-btn" aria-pressed="false" title="Cycle background sound: Fire → Water → Nature">Background</button>
+                <button id="voice-toggle" class="toggle-btn" aria-pressed="true" title="Toggle Voice Cues">Voice</button>
+                <button id="breath-toggle" class="toggle-btn" aria-pressed="true" title="Toggle Breath Sound">Breath</button>
+                <button id="ambient-toggle" class="toggle-btn" aria-pressed="false" title="Toggle Ambient Sound">Ambient</button>
             </div>
         </section>
 
         <footer>
-            <div class="streak-display">
-                <span id="streak-counter"></span>
-            </div>
             <div id="session-time" class="session-time">
                 <span id="remaining-time"></span>
-                <button id="add-minute-btn" class="add-minute-btn hidden" title="Add 1 minute">+1m</button>
             </div>
-            <p class="help-text">Space: Start / Pause &middot; S: Stop</p>
         </footer>
     </main>
 
@@ -625,8 +541,6 @@
         };
 
         const PREF_KEY = 'breathingAppPrefs';
-        const MAX_STREAK_ICONS = 10;
-
         // --- STATE ---
         let state = {
             mode: 'box',
@@ -641,11 +555,10 @@
             sessionDuration: 5 * 60,
             sessionRemaining: 0,
             sessionComplete: false,
-            summaryTimeoutId: null,
+            flashActive: false,
             preferences: {
                 voice: true,
                 breath: true,
-                haptic: false,
                 ambient: null
             }
         };
@@ -654,17 +567,12 @@
         const UI = {
             phaseLabel: document.getElementById('phase-label'),
             countdownTimer: document.getElementById('countdown-timer'),
-            startBtn: document.getElementById('start-btn'),
-            pauseBtn: document.getElementById('pause-btn'),
-            stopBtn: document.getElementById('stop-btn'),
+            actionBtn: document.getElementById('action-btn'),
             voiceToggle: document.getElementById('voice-toggle'),
             breathToggle: document.getElementById('breath-toggle'),
-            hapticToggle: document.getElementById('haptic-toggle'),
-            backgroundToggle: document.getElementById('background-toggle'),
+            ambientToggle: document.getElementById('ambient-toggle'),
             announcer: document.getElementById('announcer'),
-            streakCounter: document.getElementById('streak-counter'),
             remainingTime: document.getElementById('remaining-time'),
-            addMinuteBtn: document.getElementById('add-minute-btn'),
             durationSelector: document.getElementById('duration-selector'),
             sessionTimeDisplay: document.getElementById('session-time'),
             boxSVG: document.getElementById('box-svg'),
@@ -700,9 +608,10 @@
             primeSpeechSynthesis();
 
             // Event Listeners
-            UI.startBtn.addEventListener('click', startBreathing);
-            UI.pauseBtn.addEventListener('click', pauseBreathing);
-            UI.stopBtn.addEventListener('click', stopBreathing);
+            UI.actionBtn.addEventListener('click', () => {
+                if (state.running && !state.paused) pauseBreathing();
+                else startBreathing();
+            });
 
             UI.modeBtns.forEach(btn => {
                 btn.addEventListener('click', () => setMode(btn.dataset.mode));
@@ -710,46 +619,24 @@
 
             UI.voiceToggle.addEventListener('click', () => togglePreference('voice'));
             UI.breathToggle.addEventListener('click', () => togglePreference('breath'));
-            UI.hapticToggle.addEventListener('click', () => togglePreference('haptic'));
 
             // Duration selector
             document.querySelectorAll('.duration-btn').forEach(btn => {
                 btn.addEventListener('click', () => selectDuration(parseInt(btn.dataset.minutes)));
             });
 
-            // +1 minute button
-            UI.addMinuteBtn.addEventListener('click', addMinute);
-
-            UI.backgroundToggle.addEventListener('click', () => {
+            // Ambient toggle — simple on/off for fireplace
+            UI.ambientToggle.addEventListener('click', () => {
                 ensureAudioContext();
-
-                // Stop current ambient if any
-                if (activeAmbientType) {
-                    toggleAmbient(activeAmbientType, false);
-                }
-
-                // Cycle: off → fire → water → nature → off
-                if (!activeAmbientType) {
-                    activeAmbientType = AMBIENT_CYCLE[0];
+                if (ambientActive) {
+                    toggleAmbient('fireplace', false);
+                    ambientActive = false;
                 } else {
-                    const idx = AMBIENT_CYCLE.indexOf(activeAmbientType);
-                    if (idx >= AMBIENT_CYCLE.length - 1) {
-                        activeAmbientType = null;
-                    } else {
-                        activeAmbientType = AMBIENT_CYCLE[idx + 1];
-                    }
+                    toggleAmbient('fireplace', true);
+                    ambientActive = true;
                 }
-
-                if (activeAmbientType) {
-                    toggleAmbient(activeAmbientType, true);
-                    UI.backgroundToggle.textContent = AMBIENT_LABELS[activeAmbientType];
-                    updateToggleState(UI.backgroundToggle, true);
-                } else {
-                    UI.backgroundToggle.textContent = 'Background';
-                    updateToggleState(UI.backgroundToggle, false);
-                }
-
-                state.preferences.ambient = activeAmbientType;
+                updateToggleState(UI.ambientToggle, ambientActive);
+                state.preferences.ambient = ambientActive ? 'fireplace' : null;
                 savePreferences();
             });
 
@@ -757,11 +644,9 @@
             window.addEventListener('keydown', e => {
                 if (e.code === 'Space') {
                     e.preventDefault();
+                    if (state.flashActive) return;
                     if (state.running && !state.paused) pauseBreathing();
                     else startBreathing();
-                } else if (e.code === 'KeyS' && state.running) {
-                    e.preventDefault();
-                    stopBreathing();
                 }
             });
 
@@ -774,14 +659,6 @@
                 UI.voiceToggle.title = "Speech Synthesis not supported by your browser.";
                 state.preferences.voice = false;
                 updateToggleState(UI.voiceToggle, false);
-            }
-
-            // Only show haptic on touch devices with Vibration API (Android)
-            // Desktop Chrome has vibrate but can't actually vibrate; iOS lacks it entirely
-            const isTouchDevice = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
-            if (!isTouchDevice || !('vibrate' in navigator)) {
-                UI.hapticToggle.classList.add('hidden');
-                state.preferences.haptic = false;
             }
 
             // Register service worker for PWA
@@ -808,9 +685,6 @@
             state.lastFrameTime = timestamp;
             state.sessionRemaining = Math.max(0, state.sessionRemaining - delta);
             UI.remainingTime.textContent = formatTime(state.sessionRemaining);
-
-            // +1m button enable/disable
-            UI.addMinuteBtn.disabled = state.sessionRemaining >= 3540;
 
             // Check if time is up — begin wind-down
             if (state.sessionRemaining <= 0 && !state.sessionComplete) {
@@ -856,8 +730,8 @@
                 state.paused = false;
                 state.phaseStartTime = performance.now() - state.accumulatedPauseTime;
                 // Restart ambient sound if enabled but not active
-                if (activeAmbientType && !ambientNodes[activeAmbientType]) {
-                    toggleAmbient(activeAmbientType, true);
+                if (ambientActive && !ambientNodes['fireplace']) {
+                    toggleAmbient('fireplace', true);
                 }
                 announce("Resumed.");
             } else {
@@ -890,36 +764,36 @@
             announce("Paused.");
         }
 
-        function stopBreathing() {
-            if (!state.running) return;
+        function resetToReady() {
             state.running = false;
             state.paused = false;
             state.sessionComplete = false;
+            state.flashActive = false;
             state.sessionRemaining = 0;
             cancelAnimationFrame(state.animationFrameId);
             state.animationFrameId = null;
-
-            if (state.summaryTimeoutId) {
-                clearTimeout(state.summaryTimeoutId);
-                state.summaryTimeoutId = null;
-            }
 
             state.cycleCount = 0;
 
             if (audioContext) {
                 stopBreathSound();
             }
-            resetAmbient();
+            // Ambient keeps playing — do NOT reset it
 
             UI.shapeContainer.classList.remove('active');
+
+            // Remove any session flash element
+            const flash = document.querySelector('.session-flash');
+            if (flash) flash.remove();
+
             resetUI();
             updateUIForState();
-            announce("Session stopped.");
+            announce("Ready.");
         }
 
         function setMode(newMode) {
             if (newMode === state.mode) return;
-            if (state.running) stopBreathing();
+            if (state.running) resetToReady();
 
             state.mode = newMode;
 
@@ -957,12 +831,6 @@
             UI.phaseLabel.style.color = color;
             UI.countdownTimer.style.textShadow = `0 0 30px ${glow}`;
 
-            // Haptic feedback on phase transitions
-            if (state.preferences.haptic && 'vibrate' in navigator) {
-                const pattern = (newPhase.name === 'Hold') ? [50] : [100];
-                navigator.vibrate(pattern);
-            }
-
             if (state.preferences.voice) {
                 speak(newPhase.name);
             }
@@ -974,11 +842,6 @@
 
         function incrementCycle() {
             state.cycleCount++;
-            if (state.cycleCount <= MAX_STREAK_ICONS) {
-                UI.streakCounter.textContent = '\u{1F525}'.repeat(state.cycleCount);
-            } else {
-                UI.streakCounter.textContent = `\u{1F525} \u00D7${state.cycleCount}`;
-            }
         }
 
         // =================================================================
@@ -1011,17 +874,8 @@
             UI.phaseLabel.style.color = '';
             UI.countdownTimer.textContent = '';
             UI.countdownTimer.style.textShadow = '';
-            UI.streakCounter.textContent = '';
             UI.remainingTime.textContent = '';
-            UI.addMinuteBtn.classList.add('hidden');
             UI.durationSelector.classList.remove('hidden');
-
-            // Clear any session summary
-            const existingSummary = document.querySelector('.session-summary');
-            if (existingSummary) existingSummary.remove();
-
-            // Restore controls if they were replaced by summary Done button
-            document.getElementById('main-controls').classList.remove('hidden');
 
             const progressEl = state.mode === 'box' ? UI.boxProgress : UI.triangleProgress;
             const totalLength = pathLengths[state.mode];
@@ -1030,16 +884,23 @@
             progressEl.style.stroke = '';
         }
 
+        function updateActionButton() {
+            if (!state.running || state.paused) {
+                UI.actionBtn.textContent = state.paused ? 'Resume' : 'Start';
+                UI.actionBtn.className = 'btn action-start';
+                UI.actionBtn.setAttribute('aria-label', state.paused ? 'Resume breathing' : 'Start breathing');
+            } else {
+                UI.actionBtn.textContent = 'Pause';
+                UI.actionBtn.className = 'btn action-pause';
+                UI.actionBtn.setAttribute('aria-label', 'Pause breathing');
+            }
+        }
+
         function updateUIForState() {
-            UI.startBtn.classList.toggle('hidden', state.running && !state.paused);
-            UI.pauseBtn.classList.toggle('hidden', !state.running || state.paused);
-            UI.stopBtn.disabled = !state.running;
+            updateActionButton();
 
             // Duration selector: visible when not running, hidden during session
             UI.durationSelector.classList.toggle('hidden', state.running);
-
-            // +1m button: visible when running
-            UI.addMinuteBtn.classList.toggle('hidden', !state.running);
 
             UI.modeBtns.forEach(btn => {
                 btn.classList.toggle('active', btn.dataset.mode === state.mode);
@@ -1052,16 +913,10 @@
 
             updateToggleState(UI.voiceToggle, state.preferences.voice);
             updateToggleState(UI.breathToggle, state.preferences.breath);
-            updateToggleState(UI.hapticToggle, state.preferences.haptic);
 
-            // Restore background toggle state
-            if (state.preferences.ambient) {
-                activeAmbientType = state.preferences.ambient;
-                UI.backgroundToggle.textContent = AMBIENT_LABELS[activeAmbientType];
-                updateToggleState(UI.backgroundToggle, true);
-            } else {
-                updateToggleState(UI.backgroundToggle, false);
-            }
+            // Restore ambient toggle state
+            ambientActive = state.preferences.ambient === 'fireplace';
+            updateToggleState(UI.ambientToggle, ambientActive);
         }
 
         function updateToggleState(button, isActive) {
@@ -1085,11 +940,12 @@
 
             speechSynthesis.cancel();
             const utterance = new SpeechSynthesisUtterance(text);
-            utterance.rate = 0.9;
-            utterance.pitch = 0.9;
+            utterance.rate = 0.8;
+            utterance.pitch = 0.8;
 
             if (voices.length > 0) {
-                const selectedVoice = voices.find(v => v.name === 'Google US English') ||
+                const selectedVoice = voices.find(v => v.name === 'Samantha') ||
+                                      voices.find(v => v.name === 'Google US English') ||
                                       voices.find(v => v.lang === 'en-US');
                 if (selectedVoice) utterance.voice = selectedVoice;
             }
@@ -1126,22 +982,19 @@
         // AUDIO — Ambient
         // =================================================================
 
-        const AMBIENT_CYCLE = ['fireplace', 'waterfall', 'nature'];
-        const AMBIENT_LABELS = { fireplace: 'Fire', waterfall: 'Water', nature: 'Nature' };
-        let activeAmbientType = null;
+        let ambientActive = false;
 
         function stopBreathSound() {
             try { if (breathNodes.source) breathNodes.source.stop(); } catch {}
             if (breathNodes.gain) breathNodes.gain.gain.cancelScheduledValues(audioContext.currentTime);
         }
 
-        function resetAmbient() {
-            if (audioContext && activeAmbientType && ambientNodes[activeAmbientType]) {
-                toggleAmbient(activeAmbientType, false);
+        function stopAmbient() {
+            if (audioContext && ambientActive && ambientNodes['fireplace']) {
+                toggleAmbient('fireplace', false);
             }
-            activeAmbientType = null;
-            UI.backgroundToggle.textContent = 'Background';
-            updateToggleState(UI.backgroundToggle, false);
+            ambientActive = false;
+            updateToggleState(UI.ambientToggle, false);
             state.preferences.ambient = null;
             savePreferences();
         }
@@ -1184,234 +1037,79 @@
                 master.gain.setValueAtTime(0, audioContext.currentTime);
                 master.gain.linearRampToValueAtTime(0.07, audioContext.currentTime + 2.0);
 
-                switch (type) {
-                    case 'fireplace': {
-                        // Layer 1: Brownian noise rumble (deep warm base)
-                        const rumble = makeNoiseSource(4);
-                        const rumbleFilter = audioContext.createBiquadFilter();
-                        rumbleFilter.type = 'lowpass';
-                        rumbleFilter.frequency.value = 150;
-                        rumbleFilter.Q.value = 0.7;
-                        const rumbleGain = audioContext.createGain();
-                        rumbleGain.gain.value = 0.8;
-                        rumble.connect(rumbleFilter).connect(rumbleGain).connect(master);
-                        rumble.start();
-                        sources.push(rumble);
+                // Fireplace ambient — the only ambient sound
+                // Layer 1: Brownian noise rumble (deep warm base)
+                const rumble = makeNoiseSource(4);
+                const rumbleFilter = audioContext.createBiquadFilter();
+                rumbleFilter.type = 'lowpass';
+                rumbleFilter.frequency.value = 150;
+                rumbleFilter.Q.value = 0.7;
+                const rumbleGain = audioContext.createGain();
+                rumbleGain.gain.value = 0.8;
+                rumble.connect(rumbleFilter).connect(rumbleGain).connect(master);
+                rumble.start();
+                sources.push(rumble);
 
-                        // Layer 2: tight mid body (narrower bandpass for warmth, not wind)
-                        const midNoise = makeNoiseSource(4);
-                        const midFilter = audioContext.createBiquadFilter();
-                        midFilter.type = 'bandpass';
-                        midFilter.frequency.value = 500;
-                        midFilter.Q.value = 2.0;
-                        const midGain = audioContext.createGain();
-                        midGain.gain.value = 0.2;
-                        midNoise.connect(midFilter).connect(midGain).connect(master);
-                        midNoise.start();
-                        sources.push(midNoise);
+                // Layer 2: tight mid body (narrower bandpass for warmth)
+                const midNoise = makeNoiseSource(4);
+                const midFilter = audioContext.createBiquadFilter();
+                midFilter.type = 'bandpass';
+                midFilter.frequency.value = 500;
+                midFilter.Q.value = 2.0;
+                const midGain = audioContext.createGain();
+                midGain.gain.value = 0.2;
+                midNoise.connect(midFilter).connect(midGain).connect(master);
+                midNoise.start();
+                sources.push(midNoise);
 
-                        // Layer 3: random crackle/pop events (sharper, more frequent)
-                        const crackle = () => {
-                            const entry = ambientNodes[type];
-                            if (!entry) return;
-                            // Short sharp burst
-                            const burstLen = 0.02 + Math.random() * 0.02;
-                            const burstBuf = audioContext.createBuffer(1, audioContext.sampleRate * burstLen, audioContext.sampleRate);
-                            const bd = burstBuf.getChannelData(0);
-                            for (let i = 0; i < bd.length; i++) bd[i] = Math.random() * 2 - 1;
-                            const burst = audioContext.createBufferSource();
-                            burst.buffer = burstBuf;
-                            const burstFilter = audioContext.createBiquadFilter();
-                            burstFilter.type = 'highpass';
-                            burstFilter.frequency.value = 1000 + Math.random() * 2000;
-                            const burstGain = audioContext.createGain();
-                            const vol = 0.10 + Math.random() * 0.18;
-                            burstGain.gain.setValueAtTime(vol, audioContext.currentTime);
-                            burstGain.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + burstLen);
-                            burst.connect(burstFilter).connect(burstGain).connect(master);
-                            burst.start();
-                            burst.onended = () => { burst.disconnect(); burstFilter.disconnect(); burstGain.disconnect(); };
+                // Layer 3: random crackle/pop events
+                const crackle = () => {
+                    const entry = ambientNodes[type];
+                    if (!entry) return;
+                    const burstLen = 0.02 + Math.random() * 0.02;
+                    const burstBuf = audioContext.createBuffer(1, audioContext.sampleRate * burstLen, audioContext.sampleRate);
+                    const bd = burstBuf.getChannelData(0);
+                    for (let i = 0; i < bd.length; i++) bd[i] = Math.random() * 2 - 1;
+                    const burst = audioContext.createBufferSource();
+                    burst.buffer = burstBuf;
+                    const burstFilter = audioContext.createBiquadFilter();
+                    burstFilter.type = 'highpass';
+                    burstFilter.frequency.value = 1000 + Math.random() * 2000;
+                    const burstGain = audioContext.createGain();
+                    const vol = 0.10 + Math.random() * 0.18;
+                    burstGain.gain.setValueAtTime(vol, audioContext.currentTime);
+                    burstGain.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + burstLen);
+                    burst.connect(burstFilter).connect(burstGain).connect(master);
+                    burst.start();
+                    burst.onended = () => { burst.disconnect(); burstFilter.disconnect(); burstGain.disconnect(); };
 
-                            // Higher-pitched pop layer
-                            if (Math.random() < 0.5) {
-                                const popLen = 0.01 + Math.random() * 0.015;
-                                const popBuf = audioContext.createBuffer(1, audioContext.sampleRate * popLen, audioContext.sampleRate);
-                                const pd = popBuf.getChannelData(0);
-                                for (let i = 0; i < pd.length; i++) pd[i] = Math.random() * 2 - 1;
-                                const pop = audioContext.createBufferSource();
-                                pop.buffer = popBuf;
-                                const popFilter = audioContext.createBiquadFilter();
-                                popFilter.type = 'bandpass';
-                                popFilter.frequency.value = 3000 + Math.random() * 2000;
-                                popFilter.Q.value = 1.5;
-                                const popGain = audioContext.createGain();
-                                popGain.gain.setValueAtTime(0.06 + Math.random() * 0.08, audioContext.currentTime);
-                                popGain.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + popLen);
-                                pop.connect(popFilter).connect(popGain).connect(master);
-                                pop.start();
-                                pop.onended = () => { pop.disconnect(); popFilter.disconnect(); popGain.disconnect(); };
-                            }
-
-                            // Schedule next crackle (more frequent clustering)
-                            const nextDelay = Math.random() < 0.4
-                                ? 80 + Math.random() * 200    // quick follow-up pop
-                                : 1200 + Math.random() * 3000; // longer pause
-                            entry.timeoutId = setTimeout(crackle, nextDelay);
-                        };
-                        timeoutId = setTimeout(crackle, 600 + Math.random() * 1000);
-
-                        master.connect(audioContext.destination);
-                        break;
+                    if (Math.random() < 0.5) {
+                        const popLen = 0.01 + Math.random() * 0.015;
+                        const popBuf = audioContext.createBuffer(1, audioContext.sampleRate * popLen, audioContext.sampleRate);
+                        const pd = popBuf.getChannelData(0);
+                        for (let i = 0; i < pd.length; i++) pd[i] = Math.random() * 2 - 1;
+                        const pop = audioContext.createBufferSource();
+                        pop.buffer = popBuf;
+                        const popFilter = audioContext.createBiquadFilter();
+                        popFilter.type = 'bandpass';
+                        popFilter.frequency.value = 3000 + Math.random() * 2000;
+                        popFilter.Q.value = 1.5;
+                        const popGain = audioContext.createGain();
+                        popGain.gain.setValueAtTime(0.06 + Math.random() * 0.08, audioContext.currentTime);
+                        popGain.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + popLen);
+                        pop.connect(popFilter).connect(popGain).connect(master);
+                        pop.start();
+                        pop.onended = () => { pop.disconnect(); popFilter.disconnect(); popGain.disconnect(); };
                     }
 
-                    case 'waterfall': {
-                        // Layer 1: bass presence (not dominant)
-                        const bass = makeNoiseSource(4);
-                        const bassFilter = audioContext.createBiquadFilter();
-                        bassFilter.type = 'lowpass';
-                        bassFilter.frequency.value = 200;
-                        const bassGain = audioContext.createGain();
-                        bassGain.gain.value = 0.6;
-                        bass.connect(bassFilter).connect(bassGain).connect(master);
-                        bass.start();
-                        sources.push(bass);
+                    const nextDelay = Math.random() < 0.4
+                        ? 80 + Math.random() * 200
+                        : 1200 + Math.random() * 3000;
+                    entry.timeoutId = setTimeout(crackle, nextDelay);
+                };
+                timeoutId = setTimeout(crackle, 600 + Math.random() * 1000);
 
-                        // Layer 2: mid rushing flow (higher center, faster LFO sweep)
-                        const flow = makeNoiseSource(4);
-                        const flowFilter = audioContext.createBiquadFilter();
-                        flowFilter.type = 'bandpass';
-                        flowFilter.frequency.value = 1200;
-                        flowFilter.Q.value = 0.6;
-                        const flowLfo = audioContext.createOscillator();
-                        flowLfo.type = 'sine';
-                        flowLfo.frequency.value = 0.12;
-                        const flowLfoGain = audioContext.createGain();
-                        flowLfoGain.gain.value = 400;
-                        flowLfo.connect(flowLfoGain).connect(flowFilter.frequency);
-                        flowLfo.start();
-                        oscillators.push(flowLfo);
-                        const flowGain = audioContext.createGain();
-                        flowGain.gain.value = 0.6;
-                        flow.connect(flowFilter).connect(flowGain).connect(master);
-                        flow.start();
-                        sources.push(flow);
-
-                        // Layer 3: bright spray/mist (key differentiator — lots of high freq)
-                        const spray = makeNoiseSource(4);
-                        const sprayFilter = audioContext.createBiquadFilter();
-                        sprayFilter.type = 'highpass';
-                        sprayFilter.frequency.value = 4000;
-                        const sprayGain = audioContext.createGain();
-                        sprayGain.gain.value = 0.18;
-                        spray.connect(sprayFilter).connect(sprayGain).connect(master);
-                        spray.start();
-                        sources.push(spray);
-
-                        master.connect(audioContext.destination);
-                        break;
-                    }
-
-                    case 'nature': {
-                        // Layer 1: gentle subtle wind (lower volume, slower LFO)
-                        const wind = makeNoiseSource(4);
-                        const windFilter = audioContext.createBiquadFilter();
-                        windFilter.type = 'bandpass';
-                        windFilter.frequency.value = 600;
-                        windFilter.Q.value = 0.3;
-                        const windLfo = audioContext.createOscillator();
-                        windLfo.type = 'sine';
-                        windLfo.frequency.value = 0.03;
-                        const windLfoGain = audioContext.createGain();
-                        windLfoGain.gain.value = 300;
-                        windLfo.connect(windLfoGain).connect(windFilter.frequency);
-                        windLfo.start();
-                        oscillators.push(windLfo);
-                        const windGain = audioContext.createGain();
-                        windGain.gain.value = 0.35;
-                        wind.connect(windFilter).connect(windGain).connect(master);
-                        wind.start();
-                        sources.push(wind);
-
-                        // Layer 2: leaf rustle texture (highpass with volume LFO)
-                        const rustle = makeNoiseSource(4);
-                        const rustleFilter = audioContext.createBiquadFilter();
-                        rustleFilter.type = 'highpass';
-                        rustleFilter.frequency.value = 3500;
-                        rustleFilter.Q.value = 1.5;
-                        const rustleGain = audioContext.createGain();
-                        rustleGain.gain.value = 0.10;
-                        const rustleLfo = audioContext.createOscillator();
-                        rustleLfo.type = 'sine';
-                        rustleLfo.frequency.value = 0.2;
-                        const rustleLfoGain = audioContext.createGain();
-                        rustleLfoGain.gain.value = 0.07;
-                        rustleLfo.connect(rustleLfoGain).connect(rustleGain.gain);
-                        rustleLfo.start();
-                        oscillators.push(rustleLfo);
-                        rustle.connect(rustleFilter).connect(rustleGain).connect(master);
-                        rustle.start();
-                        sources.push(rustle);
-
-                        // Layer 3: bird chirps (higher freq range, signature element)
-                        const chirp = () => {
-                            const entry = ambientNodes[type];
-                            if (!entry) return;
-
-                            const t = audioContext.currentTime;
-                            const baseFreq = 2500 + Math.random() * 2000;
-                            const chirpDur = 0.15 + Math.random() * 0.2;
-
-                            const osc = audioContext.createOscillator();
-                            osc.type = 'sine';
-                            osc.frequency.setValueAtTime(baseFreq, t);
-                            osc.frequency.linearRampToValueAtTime(baseFreq * 1.3, t + chirpDur * 0.4);
-                            osc.frequency.linearRampToValueAtTime(baseFreq * 0.95, t + chirpDur);
-
-                            const vibrato = audioContext.createOscillator();
-                            vibrato.type = 'sine';
-                            vibrato.frequency.value = 8 + Math.random() * 4;
-                            const vibratoGain = audioContext.createGain();
-                            vibratoGain.gain.value = 30;
-                            vibrato.connect(vibratoGain).connect(osc.frequency);
-                            vibrato.start(t);
-                            vibrato.stop(t + chirpDur + 0.05);
-
-                            const cGain = audioContext.createGain();
-                            cGain.gain.setValueAtTime(0, t);
-                            cGain.gain.linearRampToValueAtTime(0.04, t + 0.02);
-                            cGain.gain.setValueAtTime(0.04, t + chirpDur * 0.5);
-                            cGain.gain.exponentialRampToValueAtTime(0.001, t + chirpDur);
-
-                            osc.connect(cGain).connect(master);
-                            osc.start(t);
-                            osc.stop(t + chirpDur + 0.01);
-                            osc.onended = () => { osc.disconnect(); cGain.disconnect(); vibrato.disconnect(); vibratoGain.disconnect(); };
-
-                            // 50% chance double-chirp
-                            if (Math.random() < 0.5) {
-                                const t2 = t + chirpDur + 0.08;
-                                const osc2 = audioContext.createOscillator();
-                                osc2.type = 'sine';
-                                osc2.frequency.setValueAtTime(baseFreq * 1.1, t2);
-                                osc2.frequency.linearRampToValueAtTime(baseFreq * 0.9, t2 + chirpDur * 0.7);
-                                const cGain2 = audioContext.createGain();
-                                cGain2.gain.setValueAtTime(0, t2);
-                                cGain2.gain.linearRampToValueAtTime(0.03, t2 + 0.02);
-                                cGain2.gain.exponentialRampToValueAtTime(0.001, t2 + chirpDur * 0.7);
-                                osc2.connect(cGain2).connect(master);
-                                osc2.start(t2);
-                                osc2.stop(t2 + chirpDur * 0.7 + 0.01);
-                                osc2.onended = () => { osc2.disconnect(); cGain2.disconnect(); };
-                            }
-
-                            entry.timeoutId = setTimeout(chirp, 4000 + Math.random() * 6000);
-                        };
-                        timeoutId = setTimeout(chirp, 2000 + Math.random() * 3000);
-
-                        master.connect(audioContext.destination);
-                        break;
-                    }
-                }
+                master.connect(audioContext.destination);
 
                 ambientNodes[type] = { sources, oscillators, gain: master, spawnedSources, timeoutId };
 
@@ -1456,104 +1154,52 @@
             savePreferences();
         }
 
-        function addMinute() {
-            if (state.sessionRemaining >= 3540) return; // Cap at ~59 min
-            state.sessionRemaining = Math.min(state.sessionRemaining + 60, 3600);
-            // If we were in wind-down, cancel it
-            if (state.sessionComplete) {
-                state.sessionComplete = false;
-            }
-            UI.remainingTime.textContent = formatTime(state.sessionRemaining);
-            UI.addMinuteBtn.disabled = state.sessionRemaining >= 3540;
-        }
-
         function showSessionSummary() {
-            // Stop the animation loop
+            // Stop the animation loop but keep ambient playing
             state.running = false;
+            state.flashActive = true;
             cancelAnimationFrame(state.animationFrameId);
             state.animationFrameId = null;
             UI.shapeContainer.classList.remove('active');
 
-            // Stop audio
+            // Stop breath sound only — ambient keeps playing
             if (audioContext) {
                 stopBreathSound();
             }
 
             // Calculate stats
-            const durationMinutes = Math.round(state.sessionDuration / 60);
             const cycles = state.cycleCount;
-            const modeName = state.mode === 'box' ? 'Box' : '4-7-8';
 
             // Update the display area
             UI.phaseLabel.textContent = '';
             UI.countdownTimer.textContent = '';
             UI.countdownTimer.style.textShadow = '';
-            UI.addMinuteBtn.classList.add('hidden');
             UI.remainingTime.textContent = '';
 
-            // Create summary element
-            const summary = document.createElement('div');
-            summary.className = 'session-summary';
-            const title = document.createElement('div');
-            title.className = 'summary-title';
-            title.textContent = 'Session Complete';
-            const stats = document.createElement('div');
-            stats.className = 'summary-stats';
-            stats.textContent = `${durationMinutes} minute${durationMinutes !== 1 ? 's' : ''} \u00B7 ${cycles} cycle${cycles !== 1 ? 's' : ''} \u00B7 ${modeName}`;
-            summary.append(title, stats);
+            // Create flash element
+            const flash = document.createElement('div');
+            flash.className = 'session-flash';
+            const flashText = document.createElement('div');
+            flashText.className = 'flash-text';
+            flashText.textContent = `Session Complete \u00B7 ${cycles} cycle${cycles !== 1 ? 's' : ''}`;
+            flash.appendChild(flashText);
 
-            // Insert summary into the display-text area
             const displayText = document.querySelector('.display-text');
-            displayText.appendChild(summary);
+            displayText.appendChild(flash);
 
-            // Replace controls with Done button
-            const mainControls = document.getElementById('main-controls');
-            mainControls.classList.add('hidden');
-
-            const doneBtn = document.createElement('button');
-            doneBtn.id = 'done-btn';
-            doneBtn.className = 'btn';
-            doneBtn.style.cssText = 'background: rgba(126, 184, 168, 0.2); color: var(--primary-color); border-color: rgba(126, 184, 168, 0.3);';
-            doneBtn.textContent = 'Done';
-            doneBtn.addEventListener('click', dismissSummary);
-            mainControls.parentElement.insertBefore(doneBtn, mainControls);
-
-            // Haptic buzz for completion
-            if (state.preferences.haptic && 'vibrate' in navigator) {
-                navigator.vibrate([100, 50, 100]);
+            // Voice announce if enabled
+            if (state.preferences.voice) {
+                speak('Session Complete');
             }
+            announce('Session Complete');
 
-            announce(`Session complete. ${durationMinutes} minutes, ${cycles} cycles.`);
-
-            // Auto-dismiss after 10 seconds
-            state.summaryTimeoutId = setTimeout(dismissSummary, 10000);
-        }
-
-        function dismissSummary() {
-            if (state.summaryTimeoutId) {
-                clearTimeout(state.summaryTimeoutId);
-                state.summaryTimeoutId = null;
-            }
-
-            // Remove done button
-            const doneBtn = document.getElementById('done-btn');
-            if (doneBtn) doneBtn.remove();
-
-            // Remove summary
-            const summary = document.querySelector('.session-summary');
-            if (summary) summary.remove();
-
-            // Stop ambient sounds
-            resetAmbient();
-
-            // Full reset
-            state.running = false;
-            state.paused = false;
-            state.sessionComplete = false;
-            state.sessionRemaining = 0;
-            state.cycleCount = 0;
-            resetUI();
-            updateUIForState();
+            // Auto-reset after 3 seconds
+            setTimeout(() => {
+                flash.style.animation = 'flashFadeOut 0.5s ease-out forwards';
+                setTimeout(() => {
+                    resetToReady();
+                }, 500);
+            }, 3000);
         }
 
         // =================================================================
@@ -1593,17 +1239,25 @@
                     if (parsed.sessionDuration) {
                         state.sessionDuration = parsed.sessionDuration;
                     }
-                    // Migrate old ambient format (object) to new (string|null)
+                    // Migrate old ambient format (object → string|null)
                     if (parsed.ambient && typeof parsed.ambient === 'object') {
-                        const activeType = Object.keys(parsed.ambient).find(k => parsed.ambient[k]);
-                        parsed.ambient = activeType || null;
+                        parsed.ambient = null;
                     }
+                    // Migrate removed ambient types to null
+                    if (parsed.ambient === 'waterfall' || parsed.ambient === 'nature') {
+                        parsed.ambient = null;
+                    }
+                    // Strip removed preference keys
+                    delete parsed.haptic;
+                    delete parsed.sessionDuration;
+
                     state.preferences = {
                         ...state.preferences,
                         ...parsed
                     };
-                    // Clean non-preference keys from preferences object
-                    delete state.preferences.sessionDuration;
+
+                    // Save cleaned preferences
+                    savePreferences();
                 }
             } catch {}
         }
