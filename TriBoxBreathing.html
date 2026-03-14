@@ -359,10 +359,133 @@
             color: var(--secondary-color);
         }
 
-        #total-time {
+        /* --- Duration Selector --- */
+        .duration-selector {
+            display: flex;
+            justify-content: center;
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+        }
+
+        .duration-btn {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            font-family: var(--font-ui);
+            font-size: 0.875rem;
+            font-weight: 500;
+            padding: 0.6rem 1rem;
+            border-radius: var(--radius-pill);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            background: rgba(255, 255, 255, 0.04);
+            color: var(--fg-muted);
+            cursor: pointer;
+            min-height: 48px;
+            min-width: 56px;
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            transition: all var(--transition-smooth);
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        .duration-btn:active {
+            transform: scale(0.96);
+        }
+
+        .duration-btn:focus-visible {
+            outline: 2px solid var(--primary-color);
+            outline-offset: 2px;
+        }
+
+        .duration-btn.selected {
+            background: rgba(126, 184, 168, 0.15);
+            color: var(--primary-color);
+            border-color: rgba(126, 184, 168, 0.3);
+        }
+
+        .duration-value {
+            font-weight: 600;
+            line-height: 1.2;
+        }
+
+        .duration-label {
+            font-size: 0.6rem;
+            color: var(--fg-muted);
+            letter-spacing: 0.3px;
+            line-height: 1;
+            margin-top: 2px;
+        }
+
+        .duration-btn.selected .duration-label {
+            color: var(--primary-color);
+            opacity: 0.7;
+        }
+
+        /* --- Session Time & +1m --- */
+        .session-time {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
             font-size: 0.75rem;
             color: var(--fg-muted);
             opacity: 0.7;
+        }
+
+        .add-minute-btn {
+            font-family: var(--font-ui);
+            font-size: 0.7rem;
+            font-weight: 600;
+            padding: 0.25rem 0.6rem;
+            border-radius: var(--radius-pill);
+            border: 1px solid rgba(126, 184, 168, 0.3);
+            background: transparent;
+            color: var(--primary-color);
+            cursor: pointer;
+            transition: all var(--transition-smooth);
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        .add-minute-btn:hover {
+            background: rgba(126, 184, 168, 0.15);
+        }
+
+        .add-minute-btn:active {
+            transform: scale(0.96);
+        }
+
+        .add-minute-btn:disabled {
+            opacity: 0.3;
+            cursor: not-allowed;
+        }
+
+        /* --- Session Summary --- */
+        .session-summary {
+            text-align: center;
+            animation: summaryFadeIn 0.6s ease-out;
+        }
+
+        .session-summary .summary-title {
+            font-family: var(--font-display);
+            font-size: 1.3rem;
+            font-weight: 400;
+            font-style: italic;
+            letter-spacing: 3px;
+            color: var(--primary-color);
+            text-transform: uppercase;
+            margin-bottom: 0.5rem;
+        }
+
+        .session-summary .summary-stats {
+            font-family: var(--font-display);
+            font-size: 1rem;
+            color: var(--fg-muted);
+        }
+
+        @keyframes summaryFadeIn {
+            from { opacity: 0; transform: translateY(8px); }
+            to { opacity: 1; transform: translateY(0); }
         }
 
         .help-text {
@@ -436,6 +559,24 @@
             </div>
         </section>
 
+        <div class="duration-selector" id="duration-selector">
+            <button class="duration-btn" data-minutes="1">
+                <span class="duration-value">1m</span>
+            </button>
+            <button class="duration-btn" data-minutes="2">
+                <span class="duration-value">2m</span>
+                <span class="duration-label">Quick</span>
+            </button>
+            <button class="duration-btn" data-minutes="3">
+                <span class="duration-value">3m</span>
+                <span class="duration-label">Calm</span>
+            </button>
+            <button class="duration-btn selected" data-minutes="5">
+                <span class="duration-value">5m</span>
+                <span class="duration-label">Deep</span>
+            </button>
+        </div>
+
         <section class="controls-section">
             <div id="main-controls" class="controls">
                 <button id="start-btn" class="btn">Start</button>
@@ -446,6 +587,7 @@
                 <button id="voice-toggle" class="toggle-btn" aria-pressed="false" title="Toggle Voice Cues">Voice</button>
                 <button id="breath-toggle" class="toggle-btn" aria-pressed="false" title="Toggle Breath Sound">Breath</button>
                 <button id="mp3-toggle" class="toggle-btn" aria-pressed="false" title="Use MP3 audio instead of synthetic">MP3</button>
+                <button id="haptic-toggle" class="toggle-btn" aria-pressed="false" title="Toggle Haptic Feedback">Haptic</button>
             </div>
             <div id="ambient-toggles" class="ambient-toggles">
                 <button class="toggle-btn" data-ambient="fireplace" aria-pressed="false" title="Fireplace">Fire</button>
@@ -458,7 +600,10 @@
             <div class="streak-display">
                 <span id="streak-counter"></span>
             </div>
-            <div id="total-time">0s</div>
+            <div id="session-time" class="session-time">
+                <span id="remaining-time"></span>
+                <button id="add-minute-btn" class="add-minute-btn hidden" title="Add 1 minute">+1m</button>
+            </div>
             <p class="help-text">Space: Start / Pause &middot; S: Stop</p>
         </footer>
     </main>
@@ -511,11 +656,15 @@
             animationFrameId: null,
             lastFrameTime: null,
             cycleCount: 0,
-            totalTime: 0,
+            sessionDuration: 5 * 60,
+            sessionRemaining: 0,
+            sessionComplete: false,
+            summaryTimeoutId: null,
             preferences: {
                 voice: true,
                 breath: true,
                 mp3: false,
+                haptic: false,
                 ambient: { fireplace: false, waterfall: false, nature: false }
             }
         };
@@ -530,9 +679,13 @@
             voiceToggle: document.getElementById('voice-toggle'),
             breathToggle: document.getElementById('breath-toggle'),
             mp3Toggle: document.getElementById('mp3-toggle'),
+            hapticToggle: document.getElementById('haptic-toggle'),
             announcer: document.getElementById('announcer'),
             streakCounter: document.getElementById('streak-counter'),
-            totalTimeDisplay: document.getElementById('total-time'),
+            remainingTime: document.getElementById('remaining-time'),
+            addMinuteBtn: document.getElementById('add-minute-btn'),
+            durationSelector: document.getElementById('duration-selector'),
+            sessionTimeDisplay: document.getElementById('session-time'),
             boxSVG: document.getElementById('box-svg'),
             triangleSVG: document.getElementById('triangle-svg'),
             boxProgress: document.getElementById('box-progress'),
@@ -577,6 +730,15 @@
             UI.voiceToggle.addEventListener('click', () => togglePreference('voice'));
             UI.breathToggle.addEventListener('click', () => togglePreference('breath'));
             UI.mp3Toggle.addEventListener('click', () => togglePreference('mp3'));
+            UI.hapticToggle.addEventListener('click', () => togglePreference('haptic'));
+
+            // Duration selector
+            document.querySelectorAll('.duration-btn').forEach(btn => {
+                btn.addEventListener('click', () => selectDuration(parseInt(btn.dataset.minutes)));
+            });
+
+            // +1 minute button
+            UI.addMinuteBtn.addEventListener('click', addMinute);
 
             document.querySelectorAll('[data-ambient]').forEach(btn => {
                 btn.addEventListener('click', () => {
@@ -630,10 +792,20 @@
                 updateUI(elapsedSincePhaseStart);
             }
 
+            // Countdown logic
             const lastTime = state.lastFrameTime ?? timestamp;
-            state.totalTime += (timestamp - lastTime) / 1000;
+            const delta = (timestamp - lastTime) / 1000;
             state.lastFrameTime = timestamp;
-            UI.totalTimeDisplay.textContent = formatTime(state.totalTime);
+            state.sessionRemaining = Math.max(0, state.sessionRemaining - delta);
+            UI.remainingTime.textContent = formatTime(state.sessionRemaining);
+
+            // +1m button enable/disable
+            UI.addMinuteBtn.disabled = state.sessionRemaining >= 3540;
+
+            // Check if time is up — begin wind-down
+            if (state.sessionRemaining <= 0 && !state.sessionComplete) {
+                state.sessionComplete = true;
+            }
 
             state.animationFrameId = requestAnimationFrame(mainLoop);
         }
@@ -674,6 +846,8 @@
                 announce("Resumed.");
             } else {
                 if (state.running) return;
+                state.sessionRemaining = state.sessionDuration;
+                state.sessionComplete = false;
                 state.phaseIndex = -1;
                 advancePhase();
             }
@@ -703,11 +877,17 @@
             if (!state.running) return;
             state.running = false;
             state.paused = false;
+            state.sessionComplete = false;
+            state.sessionRemaining = 0;
             cancelAnimationFrame(state.animationFrameId);
             state.animationFrameId = null;
 
+            if (state.summaryTimeoutId) {
+                clearTimeout(state.summaryTimeoutId);
+                state.summaryTimeoutId = null;
+            }
+
             state.cycleCount = 0;
-            state.totalTime = 0;
 
             if (audioContext) {
                 try { if (breathNodes.source) breathNodes.source.stop(); } catch {}
@@ -743,6 +923,12 @@
             if (state.phaseIndex >= PHASES[state.mode].length) {
                 state.phaseIndex = 0;
                 incrementCycle();
+
+                // Wind-down: if session timer expired, show summary instead of continuing
+                if (state.sessionComplete) {
+                    showSessionSummary();
+                    return;
+                }
             }
 
             const newPhase = PHASES[state.mode][state.phaseIndex];
@@ -759,6 +945,12 @@
                 progressEl.style.stroke = phaseStyle.color;
                 UI.phaseLabel.style.color = phaseStyle.color;
                 UI.countdownTimer.style.textShadow = `0 0 30px ${phaseStyle.glow}`;
+            }
+
+            // Haptic feedback on phase transitions
+            if (state.preferences.haptic && 'vibrate' in navigator) {
+                const pattern = (newPhase.name === 'Hold') ? [50] : [100];
+                navigator.vibrate(pattern);
             }
 
             if (state.preferences.voice) {
@@ -816,7 +1008,16 @@
             UI.countdownTimer.textContent = '';
             UI.countdownTimer.style.textShadow = '';
             UI.streakCounter.textContent = '';
-            UI.totalTimeDisplay.textContent = '0s';
+            UI.remainingTime.textContent = '';
+            UI.addMinuteBtn.classList.add('hidden');
+            UI.durationSelector.classList.remove('hidden');
+
+            // Clear any session summary
+            const existingSummary = document.querySelector('.session-summary');
+            if (existingSummary) existingSummary.remove();
+
+            // Restore controls if they were replaced by summary Done button
+            document.getElementById('main-controls').classList.remove('hidden');
 
             const progressEl = state.mode === 'box' ? UI.boxProgress : UI.triangleProgress;
             const totalLength = pathLengths[state.mode];
@@ -830,13 +1031,25 @@
             UI.pauseBtn.classList.toggle('hidden', !state.running || state.paused);
             UI.stopBtn.disabled = !state.running;
 
+            // Duration selector: visible when not running, hidden during session
+            UI.durationSelector.classList.toggle('hidden', state.running);
+
+            // +1m button: visible when running
+            UI.addMinuteBtn.classList.toggle('hidden', !state.running);
+
             UI.modeBtns.forEach(btn => {
                 btn.classList.toggle('active', btn.dataset.mode === state.mode);
+            });
+
+            // Update duration pill selection
+            document.querySelectorAll('.duration-btn').forEach(btn => {
+                btn.classList.toggle('selected', parseInt(btn.dataset.minutes) === state.sessionDuration / 60);
             });
 
             updateToggleState(UI.voiceToggle, state.preferences.voice);
             updateToggleState(UI.breathToggle, state.preferences.breath);
             updateToggleState(UI.mp3Toggle, state.preferences.mp3);
+            updateToggleState(UI.hapticToggle, state.preferences.haptic);
             document.querySelectorAll('[data-ambient]').forEach(btn => {
                 const type = btn.dataset.ambient;
                 updateToggleState(btn, state.preferences.ambient[type]);
@@ -1084,6 +1297,122 @@
         }
 
         // =================================================================
+        // DURATION & SESSION
+        // =================================================================
+
+        function selectDuration(minutes) {
+            state.sessionDuration = minutes * 60;
+            document.querySelectorAll('.duration-btn').forEach(btn => {
+                btn.classList.toggle('selected', parseInt(btn.dataset.minutes) === minutes);
+            });
+            savePreferences();
+        }
+
+        function addMinute() {
+            if (state.sessionRemaining >= 3540) return; // Cap at ~59 min
+            state.sessionRemaining = Math.min(state.sessionRemaining + 60, 3600);
+            // If we were in wind-down, cancel it
+            if (state.sessionComplete) {
+                state.sessionComplete = false;
+            }
+            UI.remainingTime.textContent = formatTime(state.sessionRemaining);
+            UI.addMinuteBtn.disabled = state.sessionRemaining >= 3540;
+        }
+
+        function showSessionSummary() {
+            // Stop the animation loop
+            state.running = false;
+            cancelAnimationFrame(state.animationFrameId);
+            state.animationFrameId = null;
+            UI.shapeContainer.classList.remove('active');
+
+            // Stop audio
+            if (audioContext) {
+                try { if (breathNodes.source) breathNodes.source.stop(); } catch {}
+                if (breathNodes.gain) breathNodes.gain.gain.cancelScheduledValues(audioContext.currentTime);
+                try { if (mp3CurrentSource) mp3CurrentSource.stop(); } catch {}
+                mp3CurrentSource = null;
+            }
+
+            // Calculate stats
+            const durationMinutes = Math.round(state.sessionDuration / 60);
+            const cycles = state.cycleCount;
+            const modeName = state.mode === 'box' ? 'Box' : '4-7-8';
+
+            // Update the display area
+            UI.phaseLabel.textContent = '';
+            UI.countdownTimer.textContent = '';
+            UI.countdownTimer.style.textShadow = '';
+            UI.addMinuteBtn.classList.add('hidden');
+            UI.remainingTime.textContent = '';
+
+            // Create summary element
+            const summary = document.createElement('div');
+            summary.className = 'session-summary';
+            summary.innerHTML = `
+                <div class="summary-title">Session Complete</div>
+                <div class="summary-stats">${durationMinutes} minute${durationMinutes !== 1 ? 's' : ''} · ${cycles} cycle${cycles !== 1 ? 's' : ''} · ${modeName}</div>
+            `;
+
+            // Insert summary into the display-text area
+            const displayText = document.querySelector('.display-text');
+            displayText.appendChild(summary);
+
+            // Replace controls with Done button
+            const mainControls = document.getElementById('main-controls');
+            mainControls.classList.add('hidden');
+
+            const doneBtn = document.createElement('button');
+            doneBtn.id = 'done-btn';
+            doneBtn.className = 'btn';
+            doneBtn.style.cssText = 'background: rgba(126, 184, 168, 0.2); color: var(--primary-color); border-color: rgba(126, 184, 168, 0.3);';
+            doneBtn.textContent = 'Done';
+            doneBtn.addEventListener('click', dismissSummary);
+            mainControls.parentElement.insertBefore(doneBtn, mainControls);
+
+            // Haptic buzz for completion
+            if (state.preferences.haptic && 'vibrate' in navigator) {
+                navigator.vibrate([100, 50, 100]);
+            }
+
+            announce(`Session complete. ${durationMinutes} minutes, ${cycles} cycles.`);
+
+            // Auto-dismiss after 10 seconds
+            state.summaryTimeoutId = setTimeout(dismissSummary, 10000);
+        }
+
+        function dismissSummary() {
+            if (state.summaryTimeoutId) {
+                clearTimeout(state.summaryTimeoutId);
+                state.summaryTimeoutId = null;
+            }
+
+            // Remove done button
+            const doneBtn = document.getElementById('done-btn');
+            if (doneBtn) doneBtn.remove();
+
+            // Remove summary
+            const summary = document.querySelector('.session-summary');
+            if (summary) summary.remove();
+
+            // Stop ambient sounds
+            if (audioContext) {
+                Object.keys(state.preferences.ambient).forEach(type => {
+                    if (ambientNodes[type]) toggleAmbient(type, false);
+                });
+            }
+
+            // Full reset
+            state.running = false;
+            state.paused = false;
+            state.sessionComplete = false;
+            state.sessionRemaining = 0;
+            state.cycleCount = 0;
+            resetUI();
+            updateUIForState();
+        }
+
+        // =================================================================
         // UTILITIES & PERSISTENCE
         // =================================================================
 
@@ -1105,7 +1434,11 @@
 
         function savePreferences() {
             try {
-                localStorage.setItem(PREF_KEY, JSON.stringify(state.preferences));
+                const data = {
+                    ...state.preferences,
+                    sessionDuration: state.sessionDuration
+                };
+                localStorage.setItem(PREF_KEY, JSON.stringify(data));
             } catch {}
         }
 
@@ -1114,11 +1447,16 @@
                 const savedPrefs = localStorage.getItem(PREF_KEY);
                 if (savedPrefs) {
                     const parsed = JSON.parse(savedPrefs);
+                    if (parsed.sessionDuration) {
+                        state.sessionDuration = parsed.sessionDuration;
+                    }
                     state.preferences = {
                         ...state.preferences,
                         ...parsed,
                         ambient: { ...state.preferences.ambient, ...(parsed.ambient || {}) }
                     };
+                    // Clean non-preference keys from preferences object
+                    delete state.preferences.sessionDuration;
                 }
             } catch {}
         }

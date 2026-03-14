@@ -1,4 +1,4 @@
-const CACHE_NAME = 'breathe-v1';
+const CACHE_NAME = 'breathe-v2';
 const ASSETS = [
   './',
   './TriBoxBreathing.html',
