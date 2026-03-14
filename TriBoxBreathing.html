@@ -129,18 +129,19 @@
 
         .mode-btn {
             flex: 1;
-            padding: 0.7rem 1rem;
-            font-family: var(--font-ui);
-            font-size: 0.875rem;
-            font-weight: 500;
-            letter-spacing: 0.3px;
+            padding: 0.65rem 1rem;
+            font-family: var(--font-display);
+            font-size: 0.95rem;
+            font-weight: 300;
+            font-style: italic;
+            letter-spacing: 1px;
             background: transparent;
             color: var(--fg-muted);
             border: none;
             border-radius: var(--radius-pill);
             cursor: pointer;
             transition: color var(--transition-smooth), background var(--transition-smooth);
-            min-height: 48px;
+            min-height: 44px;
             position: relative;
             z-index: 1;
         }
@@ -151,9 +152,9 @@
         }
 
         .mode-btn.active {
-            background: rgba(126, 184, 168, 0.15);
+            background: rgba(126, 184, 168, 0.1);
             color: var(--primary-color);
-            font-weight: 600;
+            font-weight: 400;
         }
 
         /* --- Breathing Display --- */
@@ -259,6 +260,7 @@
 
         .toggles {
             margin-bottom: 0.75rem;
+            gap: 0.5rem;
         }
 
         .btn, .toggle-btn {
@@ -287,40 +289,84 @@
             outline-offset: 2px;
         }
 
+        #action-btn {
+            font-family: var(--font-display);
+            font-size: 1.1rem;
+            font-weight: 400;
+            font-style: italic;
+            letter-spacing: 2.5px;
+            text-transform: lowercase;
+            padding: 0.8rem 3rem;
+            min-width: 140px;
+        }
+
         .action-start {
-            background: rgba(126, 184, 168, 0.2);
+            background: rgba(126, 184, 168, 0.12);
             color: var(--primary-color);
-            border-color: rgba(126, 184, 168, 0.3);
+            border-color: rgba(126, 184, 168, 0.25);
         }
 
         .action-start:hover {
-            background: rgba(126, 184, 168, 0.3);
-            box-shadow: 0 0 20px rgba(126, 184, 168, 0.15);
+            background: rgba(126, 184, 168, 0.22);
+            box-shadow: 0 0 30px rgba(126, 184, 168, 0.1);
         }
 
         .action-pause {
-            background: rgba(196, 168, 130, 0.2);
+            background: rgba(196, 168, 130, 0.12);
             color: var(--secondary-color);
-            border-color: rgba(196, 168, 130, 0.3);
+            border-color: rgba(196, 168, 130, 0.25);
         }
 
         .action-pause:hover {
-            background: rgba(196, 168, 130, 0.3);
-            box-shadow: 0 0 20px rgba(196, 168, 130, 0.15);
+            background: rgba(196, 168, 130, 0.22);
+            box-shadow: 0 0 30px rgba(196, 168, 130, 0.1);
         }
 
         .toggle-btn {
-            background: rgba(255, 255, 255, 0.04);
+            background: rgba(255, 255, 255, 0.03);
             color: var(--fg-muted);
-            font-size: 0.8rem;
-            padding: 0.6rem 1.25rem;
-            min-width: 70px;
+            font-family: var(--font-display);
+            font-size: 0.95rem;
+            font-style: italic;
+            font-weight: 300;
+            letter-spacing: 1.2px;
+            padding: 0.55rem 1.1rem;
+            min-width: 0;
+            border-color: rgba(255, 255, 255, 0.06);
+            position: relative;
+        }
+
+        .toggle-btn::after {
+            content: '';
+            position: absolute;
+            bottom: 6px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 3px;
+            height: 3px;
+            border-radius: 50%;
+            background: transparent;
+            transition: background 0.5s ease, box-shadow 0.5s ease;
         }
 
         .toggle-btn[aria-pressed="true"] {
-            background: rgba(126, 184, 168, 0.15);
+            background: rgba(126, 184, 168, 0.08);
             color: var(--primary-color);
-            border-color: rgba(126, 184, 168, 0.3);
+            border-color: rgba(126, 184, 168, 0.2);
+        }
+
+        .toggle-btn[aria-pressed="true"]::after {
+            background: var(--primary-color);
+            box-shadow: 0 0 6px var(--glow-sage);
+        }
+
+        .toggle-btn:hover {
+            background: rgba(255, 255, 255, 0.06);
+        }
+
+        .toggle-btn[aria-pressed="true"]:hover {
+            background: rgba(126, 184, 168, 0.14);
+            box-shadow: 0 0 16px rgba(126, 184, 168, 0.08);
         }
 
         /* --- Footer --- */
@@ -344,17 +390,19 @@
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            font-family: var(--font-ui);
-            font-size: 0.875rem;
-            font-weight: 500;
-            padding: 0.6rem 1rem;
+            font-family: var(--font-display);
+            font-size: 0.95rem;
+            font-weight: 300;
+            font-style: italic;
+            letter-spacing: 0.5px;
+            padding: 0.5rem 1rem;
             border-radius: var(--radius-pill);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            background: rgba(255, 255, 255, 0.03);
             color: var(--fg-muted);
             cursor: pointer;
-            min-height: 48px;
-            min-width: 56px;
+            min-height: 44px;
+            min-width: 52px;
             backdrop-filter: blur(10px);
             -webkit-backdrop-filter: blur(10px);
             transition: all var(--transition-smooth);
@@ -371,13 +419,17 @@
         }
 
         .duration-btn.selected {
-            background: rgba(126, 184, 168, 0.15);
+            background: rgba(126, 184, 168, 0.1);
             color: var(--primary-color);
-            border-color: rgba(126, 184, 168, 0.3);
+            border-color: rgba(126, 184, 168, 0.2);
+        }
+
+        .duration-btn:hover {
+            background: rgba(255, 255, 255, 0.06);
         }
 
         .duration-value {
-            font-weight: 600;
+            font-weight: 400;
             line-height: 1.2;
         }
 
@@ -502,9 +554,9 @@
                 <button id="action-btn" class="btn action-start">Start</button>
             </div>
             <div class="toggles">
-                <button id="voice-toggle" class="toggle-btn" aria-pressed="true" title="Toggle Voice Cues">Voice</button>
-                <button id="breath-toggle" class="toggle-btn" aria-pressed="true" title="Toggle Breath Sound">Breath</button>
-                <button id="ambient-toggle" class="toggle-btn" aria-pressed="false" title="Toggle Ambient Sound">Ambient</button>
+                <button id="voice-toggle" class="toggle-btn" aria-pressed="true" title="Toggle Voice Cues">voice</button>
+                <button id="breath-toggle" class="toggle-btn" aria-pressed="true" title="Toggle Breath Sound">breath</button>
+                <button id="ambient-toggle" class="toggle-btn" aria-pressed="false" title="Toggle Ambient Sound">ambient</button>
             </div>
         </section>
 
