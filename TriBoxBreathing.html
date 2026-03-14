@@ -989,16 +989,6 @@
             if (breathNodes.gain) breathNodes.gain.gain.cancelScheduledValues(audioContext.currentTime);
         }
 
-        function stopAmbient() {
-            if (audioContext && ambientActive && ambientNodes['fireplace']) {
-                toggleAmbient('fireplace', false);
-            }
-            ambientActive = false;
-            updateToggleState(UI.ambientToggle, false);
-            state.preferences.ambient = null;
-            savePreferences();
-        }
-
         // Reusable noise buffer (generate once, share across ambient sounds)
         let sharedNoiseBuffer = null;
         function getNoiseBuffer(seconds = 4) {
