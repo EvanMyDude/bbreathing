@@ -452,12 +452,60 @@
 
         .session-flash .flash-text {
             font-family: var(--font-display);
-            font-size: 1.3rem;
+            font-size: 1.1rem;
             font-weight: 400;
             font-style: italic;
-            letter-spacing: 3px;
+            letter-spacing: 1.5px;
+            max-width: 220px;
+            margin: 0 auto;
             color: var(--primary-color);
             text-transform: uppercase;
+        }
+
+        /* --- Session Progress Bar --- */
+        .session-progress {
+            width: 200px;
+            height: 2px;
+            margin: 0.75rem auto 0;
+            background: rgba(255, 255, 255, 0.06);
+            border-radius: 1px;
+            overflow: hidden;
+            display: none;
+        }
+
+        .session-progress::after {
+            content: '';
+            display: block;
+            height: 100%;
+            width: calc(var(--progress, 0) * 100%);
+            background: var(--bar-color, var(--primary-color));
+            border-radius: 1px;
+            transition: width 0.3s linear, background-color 0.4s ease;
+        }
+
+        .session-progress.visible {
+            display: block;
+        }
+
+        /* --- End Session Button --- */
+        #end-btn {
+            display: none;
+            font-family: var(--font-display);
+            font-style: italic;
+            font-size: 0.95rem;
+            letter-spacing: 1px;
+            padding: 0.6rem 1.4rem;
+            background: transparent;
+            color: var(--fg-muted);
+            border: 1px solid var(--container-border);
+            border-radius: 2rem;
+            cursor: pointer;
+            transition: color 0.2s ease, border-color 0.2s ease;
+        }
+
+        #end-btn:hover {
+            color: var(--fg-color);
+            border-color: rgba(255, 255, 255, 0.15);
         }
 
         @keyframes flashFadeIn {
@@ -534,6 +582,8 @@
             </div>
         </section>
 
+        <div id="session-progress" class="session-progress" style="--progress: 0;"></div>
+
         <div class="duration-selector" id="duration-selector">
             <button class="duration-btn" data-minutes="1">
                 <span class="duration-value">1m</span>
@@ -552,6 +602,7 @@
         <section class="controls-section">
             <div id="main-controls" class="controls">
                 <button id="action-btn" class="btn action-start">Start</button>
+                <button id="end-btn" aria-label="End session">End</button>
             </div>
             <div class="toggles">
                 <button id="voice-toggle" class="toggle-btn" aria-pressed="true" title="Toggle Chime Cues">chime</button>
@@ -632,7 +683,9 @@
             boxProgress: document.getElementById('box-progress'),
             triangleProgress: document.getElementById('triangle-progress'),
             shapeContainer: document.getElementById('shape-container'),
-            modeBtns: document.querySelectorAll('.mode-btn')
+            modeBtns: document.querySelectorAll('.mode-btn'),
+            sessionProgress: document.getElementById('session-progress'),
+            endBtn: document.getElementById('end-btn')
         };
 
         // --- AUDIO ---
@@ -659,6 +712,17 @@
             UI.actionBtn.addEventListener('click', () => {
                 if (state.running && !state.paused) pauseBreathing();
                 else startBreathing();
+            });
+
+            UI.endBtn.addEventListener('click', () => {
+                if (state.paused) {
+                    // Resume AudioContext so completion chime can play
+                    if (audioContext && audioContext.state === 'suspended') {
+                        audioContext.resume();
+                    }
+                    announce('Session ended.');
+                    showSessionSummary();
+                }
             });
 
             UI.modeBtns.forEach(btn => {
@@ -726,6 +790,11 @@
             state.lastFrameTime = timestamp;
             state.sessionRemaining = Math.max(0, state.sessionRemaining - delta);
             UI.remainingTime.textContent = formatTime(state.sessionRemaining);
+
+            // Drive session progress bar
+            const progress = state.sessionDuration > 0
+                ? 1 - (state.sessionRemaining / state.sessionDuration) : 0;
+            UI.sessionProgress.style.setProperty('--progress', Math.min(1, progress));
 
             // Check if time is up — begin wind-down
             if (state.sessionRemaining <= 0 && !state.sessionComplete) {
@@ -867,8 +936,9 @@
             progressEl.style.stroke = color;
             UI.phaseLabel.style.color = color;
             UI.countdownTimer.style.textShadow = `0 0 30px ${glow}`;
+            UI.sessionProgress.style.setProperty('--bar-color', color);
 
-            if (state.preferences.voice && (newPhase.name === 'Inhale' || newPhase.name === 'Exhale')) {
+            if (state.preferences.voice) {
                 playChime(newPhase.name.toLowerCase(), newPhase.duration);
             }
 
@@ -919,6 +989,11 @@
             progressEl.style.strokeDasharray = `${totalLength}`;
             progressEl.style.strokeDashoffset = `${totalLength}`;
             progressEl.style.stroke = '';
+
+            // Reset progress bar and end button
+            UI.sessionProgress.style.setProperty('--progress', 0);
+            UI.sessionProgress.classList.remove('visible');
+            UI.endBtn.style.display = 'none';
         }
 
         function updateActionButton() {
@@ -931,6 +1006,7 @@
                 UI.actionBtn.className = 'btn action-pause';
                 UI.actionBtn.setAttribute('aria-label', 'Pause breathing');
             }
+            UI.endBtn.style.display = state.paused ? 'inline-block' : 'none';
         }
 
         function updateUIForState() {
@@ -938,6 +1014,9 @@
 
             // Duration selector: visible when not running, hidden during session
             UI.durationSelector.classList.toggle('hidden', state.running);
+
+            // Session progress bar: visible during session
+            UI.sessionProgress.classList.toggle('visible', state.running);
 
             UI.modeBtns.forEach(btn => {
                 btn.classList.toggle('active', btn.dataset.mode === state.mode);
@@ -964,62 +1043,65 @@
         // AUDIO — Synthetic
         // =================================================================
 
+        // Singing bowl chime configs
+        const CHIME_CONFIGS = {
+            inhale:  { fundamental: 523, partials: [1, 2.06, 3.1], peakGain: 0.15, decayTime: 0.4, maxRing: 3, filterStart: 3000, filterEnd: 800 },
+            exhale:  { fundamental: 293, partials: [1, 2.06, 3.1], peakGain: 0.15, decayTime: 0.5, maxRing: 3, filterStart: 2500, filterEnd: 600 },
+            hold:    { fundamental: 392, partials: [1],            peakGain: 0.06, decayTime: 0.2, maxRing: 1.5, filterStart: 2000, filterEnd: 600 }
+        };
+
         function playChime(type, duration) {
             stopChime();
             if (!audioContext || !state.preferences.voice) return;
 
+            const cfg = CHIME_CONFIGS[type];
+            if (!cfg) return;
+
             const now = audioContext.currentTime;
+            const ringDur = Math.min(duration, cfg.maxRing);
             const oscs = [];
             const gains = [];
 
-            // Frequency configs: [startHz, endHz, relativeGain]
-            const freqs = type === 'inhale'
-                ? [[440, 523, 1], [880, 1046, 0.15], [660, 784, 0.08]]   // rising
-                : [[220, 196, 1], [440, 392, 0.15], [330, 294, 0.08]];   // settling
-
-            const lfoRate = type === 'inhale' ? 4 : 3;
-            const lfoDepth = type === 'inhale' ? 3 : 2;
-
-            // LFO for vibrato
-            const lfo = audioContext.createOscillator();
-            const lfoGain = audioContext.createGain();
-            lfo.frequency.value = lfoRate;
-            lfoGain.gain.value = lfoDepth;
-            lfo.connect(lfoGain);
-            lfo.start(now);
+            // Lowpass filter — highs decay first like real bells
+            const filter = audioContext.createBiquadFilter();
+            filter.type = 'lowpass';
+            filter.frequency.setValueAtTime(cfg.filterStart, now);
+            filter.frequency.exponentialRampToValueAtTime(cfg.filterEnd, now + ringDur);
+            filter.Q.value = 0.7;
 
             const masterGain = audioContext.createGain();
+            filter.connect(masterGain);
             masterGain.connect(audioContext.destination);
 
-            // Gain envelope: attack → peak → sustain → fade
+            // Bell envelope: instant attack → quick decay → long exponential release
             masterGain.gain.setValueAtTime(0.001, now);
-            masterGain.gain.exponentialRampToValueAtTime(0.18, now + 0.05);
-            masterGain.gain.exponentialRampToValueAtTime(0.12, now + 0.15);
-            const fadeStart = Math.max(now + 0.2, now + duration - 0.3);
-            masterGain.gain.setValueAtTime(0.12, fadeStart);
-            masterGain.gain.exponentialRampToValueAtTime(0.001, now + duration);
+            masterGain.gain.exponentialRampToValueAtTime(cfg.peakGain, now + 0.01);
+            masterGain.gain.exponentialRampToValueAtTime(cfg.peakGain * 0.3, now + cfg.decayTime);
+            masterGain.gain.exponentialRampToValueAtTime(0.001, now + ringDur);
 
-            for (const [startHz, endHz, relGain] of freqs) {
-                const osc = audioContext.createOscillator();
-                osc.type = 'sine';
-                osc.frequency.setValueAtTime(startHz, now);
-                osc.frequency.exponentialRampToValueAtTime(endHz, now + duration);
+            // Create partials with detuned shimmer pairs
+            for (const ratio of cfg.partials) {
+                const hz = cfg.fundamental * ratio;
+                const detune = ratio === 1 ? 2 : 1.5; // wider shimmer on fundamental
 
-                const oscGain = audioContext.createGain();
-                oscGain.gain.value = relGain;
+                for (const offset of [-detune, detune]) {
+                    const osc = audioContext.createOscillator();
+                    osc.type = 'sine';
+                    osc.frequency.value = hz + offset;
 
-                // Connect LFO vibrato to fundamental only
-                if (relGain === 1) lfoGain.connect(osc.frequency);
+                    const oscGain = audioContext.createGain();
+                    oscGain.gain.value = ratio === 1 ? 0.5 : 0.2;
 
-                osc.connect(oscGain);
-                oscGain.connect(masterGain);
-                osc.start(now);
-                osc.stop(now + duration + 0.05);
-                oscs.push(osc);
-                gains.push(oscGain);
+                    osc.connect(oscGain);
+                    oscGain.connect(filter);
+                    osc.start(now);
+                    osc.stop(now + ringDur + 0.05);
+                    oscs.push(osc);
+                    gains.push(oscGain);
+                }
             }
 
-            chimeNodes = { oscs, gains, masterGain, lfo, lfoGain };
+            chimeNodes = { oscs, gains, filter, masterGain };
         }
 
         function stopChime() {
@@ -1028,8 +1110,16 @@
                     try { osc.stop(); } catch {}
                 }
             }
-            if (chimeNodes.lfo) {
-                try { chimeNodes.lfo.stop(); } catch {}
+            if (chimeNodes.gains) {
+                for (const g of chimeNodes.gains) {
+                    try { g.disconnect(); } catch {}
+                }
+            }
+            if (chimeNodes.filter) {
+                try { chimeNodes.filter.disconnect(); } catch {}
+            }
+            if (chimeNodes.masterGain) {
+                try { chimeNodes.masterGain.disconnect(); } catch {}
             }
             chimeNodes = {};
         }
@@ -1040,27 +1130,45 @@
 
             const now = audioContext.currentTime;
             const chordFreqs = [523, 659, 784]; // C-E-G
-            const dur = 1.2;
+            const dur = 2;
             const oscs = [];
+            const gains = [];
+
+            const filter = audioContext.createBiquadFilter();
+            filter.type = 'lowpass';
+            filter.frequency.setValueAtTime(3000, now);
+            filter.frequency.exponentialRampToValueAtTime(600, now + dur);
+            filter.Q.value = 0.7;
 
             const masterGain = audioContext.createGain();
+            filter.connect(masterGain);
             masterGain.connect(audioContext.destination);
+
             masterGain.gain.setValueAtTime(0.001, now);
-            masterGain.gain.exponentialRampToValueAtTime(0.15, now + 0.05);
-            masterGain.gain.setValueAtTime(0.15, now + 0.4);
+            masterGain.gain.exponentialRampToValueAtTime(0.18, now + 0.01);
+            masterGain.gain.exponentialRampToValueAtTime(0.06, now + 0.5);
             masterGain.gain.exponentialRampToValueAtTime(0.001, now + dur);
 
             for (const hz of chordFreqs) {
-                const osc = audioContext.createOscillator();
-                osc.type = 'sine';
-                osc.frequency.value = hz;
-                osc.connect(masterGain);
-                osc.start(now);
-                osc.stop(now + dur + 0.05);
-                oscs.push(osc);
+                // Each note gets a detuned pair for shimmer
+                for (const offset of [-1.5, 1.5]) {
+                    const osc = audioContext.createOscillator();
+                    osc.type = 'sine';
+                    osc.frequency.value = hz + offset;
+
+                    const oscGain = audioContext.createGain();
+                    oscGain.gain.value = 0.33;
+
+                    osc.connect(oscGain);
+                    oscGain.connect(filter);
+                    osc.start(now);
+                    osc.stop(now + dur + 0.05);
+                    oscs.push(osc);
+                    gains.push(oscGain);
+                }
             }
 
-            chimeNodes = { oscs, masterGain };
+            chimeNodes = { oscs, gains, filter, masterGain };
         }
 
         function playBreathSound(duration) {
@@ -1257,10 +1365,12 @@
         function showSessionSummary() {
             // Stop the animation loop but keep ambient playing
             state.running = false;
+            state.paused = false;
             state.flashActive = true;
             cancelAnimationFrame(state.animationFrameId);
             state.animationFrameId = null;
             UI.shapeContainer.classList.remove('active');
+            UI.endBtn.style.display = 'none';
 
             // Stop breath/chime sounds — ambient keeps playing
             if (audioContext) {
