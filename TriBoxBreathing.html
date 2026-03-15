@@ -554,7 +554,7 @@
                 <button id="action-btn" class="btn action-start">Start</button>
             </div>
             <div class="toggles">
-                <button id="voice-toggle" class="toggle-btn" aria-pressed="true" title="Toggle Voice Cues">voice</button>
+                <button id="voice-toggle" class="toggle-btn" aria-pressed="true" title="Toggle Chime Cues">chime</button>
                 <button id="breath-toggle" class="toggle-btn" aria-pressed="true" title="Toggle Breath Sound">breath</button>
                 <button id="ambient-toggle" class="toggle-btn" aria-pressed="false" title="Toggle Ambient Sound">ambient</button>
             </div>
@@ -639,12 +639,10 @@
         let audioContext;
         let breathNodes = {};
         let ambientNodes = {};
-        const isSpeechSupported = 'speechSynthesis' in window;
+        let chimeNodes = {};
         let isReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
         window.matchMedia('(prefers-reduced-motion: reduce)')
             .addEventListener('change', e => { isReducedMotion = e.matches; });
-        let speechInitialized = false;
-        let voices = [];
 
         // --- SVG PATH LENGTHS ---
         const pathLengths = {
@@ -657,8 +655,6 @@
         // =================================================================
 
         function init() {
-            primeSpeechSynthesis();
-
             // Event Listeners
             UI.actionBtn.addEventListener('click', () => {
                 if (state.running && !state.paused) pauseBreathing();
@@ -705,13 +701,6 @@
             loadPreferences();
             updateUIForState();
             resetUI();
-
-            if (!isSpeechSupported) {
-                UI.voiceToggle.disabled = true;
-                UI.voiceToggle.title = "Speech Synthesis not supported by your browser.";
-                state.preferences.voice = false;
-                updateToggleState(UI.voiceToggle, false);
-            }
 
             // Register service worker for PWA
             if ('serviceWorker' in navigator) {
@@ -773,11 +762,6 @@
                 return;
             }
 
-            if (isSpeechSupported && !speechInitialized) {
-                speechSynthesis.speak(new SpeechSynthesisUtterance(''));
-                speechInitialized = true;
-            }
-
             if (state.paused) {
                 state.paused = false;
                 state.phaseStartTime = performance.now() - state.accumulatedPauseTime;
@@ -829,6 +813,7 @@
 
             if (audioContext) {
                 stopBreathSound();
+                stopChime();
             }
             // Ambient keeps playing — do NOT reset it
 
@@ -883,8 +868,8 @@
             UI.phaseLabel.style.color = color;
             UI.countdownTimer.style.textShadow = `0 0 30px ${glow}`;
 
-            if (state.preferences.voice) {
-                speak(newPhase.name);
+            if (state.preferences.voice && (newPhase.name === 'Inhale' || newPhase.name === 'Exhale')) {
+                playChime(newPhase.name.toLowerCase(), newPhase.duration);
             }
 
             if (state.preferences.breath && (newPhase.name === 'Inhale' || newPhase.name === 'Exhale')) {
@@ -979,30 +964,103 @@
         // AUDIO — Synthetic
         // =================================================================
 
-        function primeSpeechSynthesis() {
-            if (!isSpeechSupported) return;
-            speechSynthesis.onvoiceschanged = () => {
-                voices = speechSynthesis.getVoices();
-            };
-            voices = speechSynthesis.getVoices();
-        }
+        function playChime(type, duration) {
+            stopChime();
+            if (!audioContext || !state.preferences.voice) return;
 
-        function speak(text) {
-            if (!isSpeechSupported || !state.preferences.voice) return;
+            const now = audioContext.currentTime;
+            const oscs = [];
+            const gains = [];
 
-            speechSynthesis.cancel();
-            const utterance = new SpeechSynthesisUtterance(text);
-            utterance.rate = 0.8;
-            utterance.pitch = 0.8;
+            // Frequency configs: [startHz, endHz, relativeGain]
+            const freqs = type === 'inhale'
+                ? [[440, 523, 1], [880, 1046, 0.15], [660, 784, 0.08]]   // rising
+                : [[220, 196, 1], [440, 392, 0.15], [330, 294, 0.08]];   // settling
 
-            if (voices.length > 0) {
-                const selectedVoice = voices.find(v => v.name === 'Samantha') ||
-                                      voices.find(v => v.name === 'Google US English') ||
-                                      voices.find(v => v.lang === 'en-US');
-                if (selectedVoice) utterance.voice = selectedVoice;
+            const lfoRate = type === 'inhale' ? 4 : 3;
+            const lfoDepth = type === 'inhale' ? 3 : 2;
+
+            // LFO for vibrato
+            const lfo = audioContext.createOscillator();
+            const lfoGain = audioContext.createGain();
+            lfo.frequency.value = lfoRate;
+            lfoGain.gain.value = lfoDepth;
+            lfo.connect(lfoGain);
+            lfo.start(now);
+
+            const masterGain = audioContext.createGain();
+            masterGain.connect(audioContext.destination);
+
+            // Gain envelope: attack → peak → sustain → fade
+            masterGain.gain.setValueAtTime(0.001, now);
+            masterGain.gain.exponentialRampToValueAtTime(0.18, now + 0.05);
+            masterGain.gain.exponentialRampToValueAtTime(0.12, now + 0.15);
+            const fadeStart = Math.max(now + 0.2, now + duration - 0.3);
+            masterGain.gain.setValueAtTime(0.12, fadeStart);
+            masterGain.gain.exponentialRampToValueAtTime(0.001, now + duration);
+
+            for (const [startHz, endHz, relGain] of freqs) {
+                const osc = audioContext.createOscillator();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(startHz, now);
+                osc.frequency.exponentialRampToValueAtTime(endHz, now + duration);
+
+                const oscGain = audioContext.createGain();
+                oscGain.gain.value = relGain;
+
+                // Connect LFO vibrato to fundamental only
+                if (relGain === 1) lfoGain.connect(osc.frequency);
+
+                osc.connect(oscGain);
+                oscGain.connect(masterGain);
+                osc.start(now);
+                osc.stop(now + duration + 0.05);
+                oscs.push(osc);
+                gains.push(oscGain);
             }
 
-            speechSynthesis.speak(utterance);
+            chimeNodes = { oscs, gains, masterGain, lfo, lfoGain };
+        }
+
+        function stopChime() {
+            if (chimeNodes.oscs) {
+                for (const osc of chimeNodes.oscs) {
+                    try { osc.stop(); } catch {}
+                }
+            }
+            if (chimeNodes.lfo) {
+                try { chimeNodes.lfo.stop(); } catch {}
+            }
+            chimeNodes = {};
+        }
+
+        function playCompleteChime() {
+            stopChime();
+            if (!audioContext || !state.preferences.voice) return;
+
+            const now = audioContext.currentTime;
+            const chordFreqs = [523, 659, 784]; // C-E-G
+            const dur = 1.2;
+            const oscs = [];
+
+            const masterGain = audioContext.createGain();
+            masterGain.connect(audioContext.destination);
+            masterGain.gain.setValueAtTime(0.001, now);
+            masterGain.gain.exponentialRampToValueAtTime(0.15, now + 0.05);
+            masterGain.gain.setValueAtTime(0.15, now + 0.4);
+            masterGain.gain.exponentialRampToValueAtTime(0.001, now + dur);
+
+            for (const hz of chordFreqs) {
+                const osc = audioContext.createOscillator();
+                osc.type = 'sine';
+                osc.frequency.value = hz;
+                osc.connect(masterGain);
+                osc.start(now);
+                osc.stop(now + dur + 0.05);
+                oscs.push(osc);
+            }
+
+            chimeNodes = { oscs, masterGain };
         }
 
         function playBreathSound(duration) {
@@ -1204,9 +1262,10 @@
             state.animationFrameId = null;
             UI.shapeContainer.classList.remove('active');
 
-            // Stop breath sound only — ambient keeps playing
+            // Stop breath/chime sounds — ambient keeps playing
             if (audioContext) {
                 stopBreathSound();
+                stopChime();
             }
 
             // Calculate stats
@@ -1229,9 +1288,9 @@
             const displayText = document.querySelector('.display-text');
             displayText.appendChild(flash);
 
-            // Voice announce if enabled
+            // Chime announce if enabled
             if (state.preferences.voice) {
-                speak('Session Complete');
+                playCompleteChime();
             }
             announce('Session Complete');
 
@@ -1258,7 +1317,7 @@
             if (toggleEl) updateToggleState(toggleEl, state.preferences[key]);
             savePreferences();
 
-            if (key === 'breath' && state.preferences.breath) {
+            if ((key === 'breath' || key === 'voice') && state.preferences[key]) {
                 ensureAudioContext();
             }
         }
