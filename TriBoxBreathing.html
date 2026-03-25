@@ -605,7 +605,7 @@
                 <button id="end-btn" aria-label="End session">End</button>
             </div>
             <div class="toggles">
-                <button id="voice-toggle" class="toggle-btn" aria-pressed="true" title="Toggle Chime Cues">chime</button>
+                <button id="voice-toggle" class="toggle-btn" aria-pressed="true" title="Toggle Voice Cues">voice</button>
                 <button id="breath-toggle" class="toggle-btn" aria-pressed="true" title="Toggle Breath Sound">breath</button>
                 <button id="ambient-toggle" class="toggle-btn" aria-pressed="false" title="Toggle Ambient Sound">ambient</button>
             </div>
@@ -692,7 +692,7 @@
         let audioContext;
         let breathNodes = {};
         let ambientNodes = {};
-        let chimeNodes = {};
+        let cachedVoice = null;
         let isReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
         window.matchMedia('(prefers-reduced-motion: reduce)')
             .addEventListener('change', e => { isReducedMotion = e.matches; });
@@ -716,7 +716,7 @@
 
             UI.endBtn.addEventListener('click', () => {
                 if (state.paused) {
-                    // Resume AudioContext so completion chime can play
+                    // Resume AudioContext so completion sounds can play
                     if (audioContext && audioContext.state === 'suspended') {
                         audioContext.resume();
                     }
@@ -761,6 +761,8 @@
                     else startBreathing();
                 }
             });
+
+            if ('speechSynthesis' in window) initVoices();
 
             loadPreferences();
             updateUIForState();
@@ -817,6 +819,18 @@
                 } catch (e) {
                     console.error("Web Audio API is not supported.");
                     return false;
+                }
+                // Unlock iOS audio pipeline with silent buffer during user gesture
+                const silentBuffer = audioContext.createBuffer(1, 1, audioContext.sampleRate);
+                const src = audioContext.createBufferSource();
+                src.buffer = silentBuffer;
+                src.connect(audioContext.destination);
+                src.start();
+                // Warm up speechSynthesis during user gesture (iOS requires this)
+                if ('speechSynthesis' in window) {
+                    const warmup = new SpeechSynthesisUtterance(' ');
+                    warmup.volume = 0;
+                    speechSynthesis.speak(warmup);
                 }
             }
             if (audioContext.state === 'suspended') {
@@ -882,8 +896,8 @@
 
             if (audioContext) {
                 stopBreathSound();
-                stopChime();
             }
+            if ('speechSynthesis' in window) speechSynthesis.cancel();
             // Ambient keeps playing — do NOT reset it
 
             UI.shapeContainer.classList.remove('active');
@@ -939,7 +953,7 @@
             UI.sessionProgress.style.setProperty('--bar-color', color);
 
             if (state.preferences.voice) {
-                playChime(newPhase.name.toLowerCase(), newPhase.duration);
+                speakCue(newPhase.name);
             }
 
             if (state.preferences.breath && (newPhase.name === 'Inhale' || newPhase.name === 'Exhale')) {
@@ -1040,135 +1054,38 @@
         }
 
         // =================================================================
-        // AUDIO — Synthetic
+        // AUDIO — Voice Cues
         // =================================================================
 
-        // Singing bowl chime configs
-        const CHIME_CONFIGS = {
-            inhale:  { fundamental: 523, partials: [1, 2.06, 3.1], peakGain: 0.15, decayTime: 0.4, maxRing: 3, filterStart: 3000, filterEnd: 800 },
-            exhale:  { fundamental: 293, partials: [1, 2.06, 3.1], peakGain: 0.15, decayTime: 0.5, maxRing: 3, filterStart: 2500, filterEnd: 600 },
-            hold:    { fundamental: 392, partials: [1],            peakGain: 0.06, decayTime: 0.2, maxRing: 1.5, filterStart: 2000, filterEnd: 600 }
-        };
+        // Voice cue preferences — soft, soothing iOS-optimized
+        const PREFERRED_VOICES = ['Samantha', 'Karen', 'Moira', 'Tessa'];
 
-        function playChime(type, duration) {
-            stopChime();
-            if (!audioContext || !state.preferences.voice) return;
-
-            const cfg = CHIME_CONFIGS[type];
-            if (!cfg) return;
-
-            const now = audioContext.currentTime;
-            const ringDur = Math.min(duration, cfg.maxRing);
-            const oscs = [];
-            const gains = [];
-
-            // Lowpass filter — highs decay first like real bells
-            const filter = audioContext.createBiquadFilter();
-            filter.type = 'lowpass';
-            filter.frequency.setValueAtTime(cfg.filterStart, now);
-            filter.frequency.exponentialRampToValueAtTime(cfg.filterEnd, now + ringDur);
-            filter.Q.value = 0.7;
-
-            const masterGain = audioContext.createGain();
-            filter.connect(masterGain);
-            masterGain.connect(audioContext.destination);
-
-            // Bell envelope: instant attack → quick decay → long exponential release
-            masterGain.gain.setValueAtTime(0.001, now);
-            masterGain.gain.exponentialRampToValueAtTime(cfg.peakGain, now + 0.01);
-            masterGain.gain.exponentialRampToValueAtTime(cfg.peakGain * 0.3, now + cfg.decayTime);
-            masterGain.gain.exponentialRampToValueAtTime(0.001, now + ringDur);
-
-            // Create partials with detuned shimmer pairs
-            for (const ratio of cfg.partials) {
-                const hz = cfg.fundamental * ratio;
-                const detune = ratio === 1 ? 2 : 1.5; // wider shimmer on fundamental
-
-                for (const offset of [-detune, detune]) {
-                    const osc = audioContext.createOscillator();
-                    osc.type = 'sine';
-                    osc.frequency.value = hz + offset;
-
-                    const oscGain = audioContext.createGain();
-                    oscGain.gain.value = ratio === 1 ? 0.5 : 0.2;
-
-                    osc.connect(oscGain);
-                    oscGain.connect(filter);
-                    osc.start(now);
-                    osc.stop(now + ringDur + 0.05);
-                    oscs.push(osc);
-                    gains.push(oscGain);
+        function initVoices() {
+            const pickVoice = () => {
+                if (cachedVoice) return;
+                const voices = speechSynthesis.getVoices();
+                if (!voices.length) return;
+                // Prefer specific iOS voices known for natural sound
+                for (const name of PREFERRED_VOICES) {
+                    const match = voices.find(v => v.name.includes(name) && v.lang.startsWith('en'));
+                    if (match) { cachedVoice = match; return; }
                 }
-            }
-
-            chimeNodes = { oscs, gains, filter, masterGain };
+                // Fall back to any English voice
+                cachedVoice = voices.find(v => v.lang.startsWith('en')) || voices[0];
+            };
+            pickVoice();
+            speechSynthesis.addEventListener('voiceschanged', pickVoice);
         }
 
-        function stopChime() {
-            if (chimeNodes.oscs) {
-                for (const osc of chimeNodes.oscs) {
-                    try { osc.stop(); } catch {}
-                }
-            }
-            if (chimeNodes.gains) {
-                for (const g of chimeNodes.gains) {
-                    try { g.disconnect(); } catch {}
-                }
-            }
-            if (chimeNodes.filter) {
-                try { chimeNodes.filter.disconnect(); } catch {}
-            }
-            if (chimeNodes.masterGain) {
-                try { chimeNodes.masterGain.disconnect(); } catch {}
-            }
-            chimeNodes = {};
-        }
-
-        function playCompleteChime() {
-            stopChime();
-            if (!audioContext || !state.preferences.voice) return;
-
-            const now = audioContext.currentTime;
-            const chordFreqs = [523, 659, 784]; // C-E-G
-            const dur = 2;
-            const oscs = [];
-            const gains = [];
-
-            const filter = audioContext.createBiquadFilter();
-            filter.type = 'lowpass';
-            filter.frequency.setValueAtTime(3000, now);
-            filter.frequency.exponentialRampToValueAtTime(600, now + dur);
-            filter.Q.value = 0.7;
-
-            const masterGain = audioContext.createGain();
-            filter.connect(masterGain);
-            masterGain.connect(audioContext.destination);
-
-            masterGain.gain.setValueAtTime(0.001, now);
-            masterGain.gain.exponentialRampToValueAtTime(0.18, now + 0.01);
-            masterGain.gain.exponentialRampToValueAtTime(0.06, now + 0.5);
-            masterGain.gain.exponentialRampToValueAtTime(0.001, now + dur);
-
-            for (const hz of chordFreqs) {
-                // Each note gets a detuned pair for shimmer
-                for (const offset of [-1.5, 1.5]) {
-                    const osc = audioContext.createOscillator();
-                    osc.type = 'sine';
-                    osc.frequency.value = hz + offset;
-
-                    const oscGain = audioContext.createGain();
-                    oscGain.gain.value = 0.33;
-
-                    osc.connect(oscGain);
-                    oscGain.connect(filter);
-                    osc.start(now);
-                    osc.stop(now + dur + 0.05);
-                    oscs.push(osc);
-                    gains.push(oscGain);
-                }
-            }
-
-            chimeNodes = { oscs, gains, filter, masterGain };
+        function speakCue(text) {
+            if (!('speechSynthesis' in window) || !state.preferences.voice) return;
+            speechSynthesis.cancel();
+            const utt = new SpeechSynthesisUtterance(text);
+            if (cachedVoice) utt.voice = cachedVoice;
+            utt.rate = 0.75;
+            utt.pitch = 0.9;
+            utt.volume = 0.6;
+            speechSynthesis.speak(utt);
         }
 
         function playBreathSound(duration) {
@@ -1372,11 +1289,11 @@
             UI.shapeContainer.classList.remove('active');
             UI.endBtn.style.display = 'none';
 
-            // Stop breath/chime sounds — ambient keeps playing
+            // Stop breath sounds — ambient keeps playing
             if (audioContext) {
                 stopBreathSound();
-                stopChime();
             }
+            if ('speechSynthesis' in window) speechSynthesis.cancel();
 
             // Calculate stats
             const cycles = state.cycleCount;
@@ -1398,9 +1315,8 @@
             const displayText = document.querySelector('.display-text');
             displayText.appendChild(flash);
 
-            // Chime announce if enabled
             if (state.preferences.voice) {
-                playCompleteChime();
+                speakCue('Session complete');
             }
             announce('Session Complete');
 
