@@ -54,6 +54,7 @@
 
         html {
             height: 100%;
+            overscroll-behavior: none;
         }
 
         body {
@@ -64,10 +65,11 @@
             display: flex;
             justify-content: center;
             align-items: center;
-            padding: env(safe-area-inset-top, 0.75rem) env(safe-area-inset-right, 0.75rem) env(safe-area-inset-bottom, 0.75rem) env(safe-area-inset-left, 0.75rem);
             -webkit-font-smoothing: antialiased;
             -moz-osx-font-smoothing: grayscale;
             overflow-y: auto;
+            overscroll-behavior: none;
+            touch-action: manipulation;
         }
 
         /* Noise texture overlay */
@@ -91,12 +93,20 @@
             background: var(--container-bg);
             backdrop-filter: blur(20px);
             -webkit-backdrop-filter: blur(20px);
-            border: 1px solid var(--container-border);
             border-radius: 0;
             display: flex;
             flex-direction: column;
-            padding: 1.5rem;
+            /* Safe-area insets live inside the container so the installed app never exceeds the screen */
+            padding:
+                calc(1.5rem + env(safe-area-inset-top, 0px))
+                calc(1.5rem + env(safe-area-inset-right, 0px))
+                calc(1.5rem + env(safe-area-inset-bottom, 0px))
+                calc(1.5rem + env(safe-area-inset-left, 0px));
             animation: fadeIn 0.8s ease-out;
+            -webkit-user-select: none;
+            user-select: none;
+            -webkit-touch-callout: none;
+            -webkit-tap-highlight-color: transparent;
         }
 
         /* On larger screens, show as a card */
@@ -105,6 +115,7 @@
                 min-height: auto;
                 height: 95vh;
                 max-height: 780px;
+                border: 1px solid var(--container-border);
                 border-radius: var(--radius-lg);
                 box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4), 0 0 80px rgba(126, 184, 168, 0.05);
             }
@@ -163,13 +174,27 @@
             display: grid;
             place-items: center;
             position: relative;
-            min-height: 280px;
+            min-height: min(280px, 38dvh);
         }
 
         .shape-container {
             position: relative;
-            width: 240px;
-            height: 240px;
+            width: min(240px, 36dvh);
+            height: min(240px, 36dvh);
+        }
+
+        /* Soft orb that fills and empties with the breath (scale driven per frame) */
+        .breath-orb {
+            position: absolute;
+            inset: 2%;
+            border-radius: 50%;
+            color: var(--primary-color);
+            background: radial-gradient(circle closest-side, currentColor 0%, transparent 100%);
+            opacity: 0.2;
+            transform: scale(0.75);
+            transition: color 0.8s ease;
+            will-change: transform;
+            pointer-events: none;
         }
 
         .shape-svg {
@@ -198,7 +223,7 @@
             stroke-width: 6;
             fill: none;
             stroke-linecap: round;
-            transition: stroke-dashoffset 0.15s linear, stroke 0.6s ease;
+            transition: stroke 0.6s ease;
             filter: url(#glow);
         }
 
@@ -231,16 +256,6 @@
         }
 
         .hidden { display: none !important; }
-
-        /* Breathing pulse animation on the shape container */
-        @keyframes breathePulse {
-            0%, 100% { transform: scale(1); }
-            50% { transform: scale(1.02); }
-        }
-
-        .shape-container.active {
-            animation: breathePulse 4s ease-in-out infinite;
-        }
 
         /* --- Controls --- */
         .controls-section {
@@ -508,6 +523,22 @@
             border-color: rgba(255, 255, 255, 0.15);
         }
 
+        /* --- In-session chrome: controls recede while breathing; tap anywhere to reveal toggles --- */
+        .mode-switcher, .toggles {
+            transition: opacity 0.6s ease, visibility 0s linear 0s;
+        }
+
+        .app-container.in-session .mode-switcher,
+        .app-container.in-session:not(.reveal) .toggles {
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 1.2s ease, visibility 0s linear 1.2s;
+        }
+
+        .app-container.in-session:not(.reveal) #action-btn {
+            opacity: 0.4;
+        }
+
         @keyframes flashFadeIn {
             from { opacity: 0; transform: translateY(8px); }
             to { opacity: 1; transform: translateY(0); }
@@ -538,9 +569,6 @@
             .app-container {
                 animation: none;
             }
-            .shape-container.active {
-                animation: none;
-            }
         }
     </style>
 </head>
@@ -554,6 +582,8 @@
 
         <section class="breathing-display">
             <div id="shape-container" class="shape-container">
+                <div id="breath-orb" class="breath-orb"></div>
+
                 <!-- Shared SVG filter for glow effect -->
                 <svg style="position:absolute;width:0;height:0">
                     <defs>
@@ -636,6 +666,13 @@
             ]
         };
 
+        // Empty the lungs before the first inhale (phaseIndex -1); not counted toward session time
+        const LEAD_IN = { name: 'Exhale', label: 'Breathe out', duration: 3 };
+
+        // A tick gap this long on return means the OS froze the page (iOS does this to
+        // backgrounded web apps), so the session pauses where the audio stopped
+        const STALL_MS = 1500;
+
         // Phase-to-color mapping for dynamic stroke + label color
         const PHASE_COLORS = {
             'Inhale': { color: 'var(--inhale-color)', glow: 'var(--glow-sage)' },
@@ -653,7 +690,7 @@
             phaseStartTime: 0,
             accumulatedPauseTime: 0,
             animationFrameId: null,
-            lastFrameTime: null,
+            lastTickTime: null,
             cycleCount: 0,
             sessionDuration: 5 * 60,
             sessionRemaining: 0,
@@ -668,6 +705,8 @@
 
         // --- UI ELEMENTS ---
         const UI = {
+            app: document.querySelector('.app-container'),
+            orb: document.getElementById('breath-orb'),
             phaseLabel: document.getElementById('phase-label'),
             countdownTimer: document.getElementById('countdown-timer'),
             actionBtn: document.getElementById('action-btn'),
@@ -682,7 +721,6 @@
             triangleSVG: document.getElementById('triangle-svg'),
             boxProgress: document.getElementById('box-progress'),
             triangleProgress: document.getElementById('triangle-progress'),
-            shapeContainer: document.getElementById('shape-container'),
             modeBtns: document.querySelectorAll('.mode-btn'),
             sessionProgress: document.getElementById('session-progress'),
             endBtn: document.getElementById('end-btn')
@@ -710,20 +748,30 @@
         function init() {
             // Event Listeners
             UI.actionBtn.addEventListener('click', () => {
+                // Ignore taps during the completion flash; its auto-reset would kill a new session
+                if (state.flashActive) return;
                 if (state.running && !state.paused) pauseBreathing();
                 else startBreathing();
             });
 
             UI.endBtn.addEventListener('click', () => {
                 if (state.paused) {
-                    // Resume AudioContext so completion sounds can play
-                    if (audioContext && audioContext.state === 'suspended') {
-                        audioContext.resume();
-                    }
+                    // Resume AudioContext so ambient keeps playing after the session
+                    if (audioContext) ensureAudioContext();
                     announce('Session ended.');
                     showSessionSummary();
                 }
             });
+
+            // While breathing, a tap anywhere briefly brings back the faded toggles
+            UI.app.addEventListener('click', e => {
+                if (!state.running || state.paused) return;
+                // The Start/Resume tap itself bubbles here; it shouldn't reveal anything
+                if (e.target.closest('#action-btn')) return;
+                revealControls();
+            });
+
+            document.addEventListener('visibilitychange', handleVisibilityChange);
 
             UI.modeBtns.forEach(btn => {
                 btn.addEventListener('click', () => setMode(btn.dataset.mode));
@@ -743,6 +791,8 @@
                 if (ambientActive) {
                     toggleAmbient('fireplace', false);
                     ambientActive = false;
+                    // After the 1s fade-out, release audio if nothing else is playing
+                    setTimeout(idleAudio, 1200);
                 } else {
                     toggleAmbient('fireplace', true);
                     ambientActive = true;
@@ -774,36 +824,112 @@
             }
         }
 
-        function mainLoop(timestamp) {
+        function currentPhase() {
+            return state.phaseIndex < 0 ? LEAD_IN : PHASES[state.mode][state.phaseIndex];
+        }
+
+        // Session logic, driven by wall-clock time so a late tick (throttled or
+        // backgrounded page) catches up on phase boundaries instead of drifting
+        function tick(now) {
             if (!state.running || state.paused) return;
 
-            const currentPhase = PHASES[state.mode][state.phaseIndex];
-            const elapsedSincePhaseStart = (timestamp - state.phaseStartTime) / 1000;
+            if (state.phaseIndex >= 0) {
+                const delta = (now - state.lastTickTime) / 1000;
+                state.sessionRemaining = Math.max(0, state.sessionRemaining - delta);
+                // Time is up: finish the current cycle, then wind down
+                if (state.sessionRemaining <= 0) state.sessionComplete = true;
+            }
+            state.lastTickTime = now;
 
-            if (elapsedSincePhaseStart >= currentPhase.duration) {
-                advancePhase();
-            } else {
-                updateUI(elapsedSincePhaseStart);
+            let phase = currentPhase();
+            let advanced = false;
+            while (now - state.phaseStartTime >= phase.duration * 1000) {
+                state.phaseStartTime += phase.duration * 1000;
+                if (!advancePhase()) return;
+                phase = currentPhase();
+                advanced = true;
+            }
+            if (advanced) enterPhase((now - state.phaseStartTime) / 1000);
+        }
+
+        function frame() {
+            const now = performance.now();
+            tick(now);
+            if (!state.running || state.paused) return;
+            render(now);
+            state.animationFrameId = requestAnimationFrame(frame);
+        }
+
+        // =================================================================
+        // MOBILE LIFECYCLE
+        // =================================================================
+
+        // rAF stops in hidden pages; a timer keeps the session (and its audio cues)
+        // going where the platform allows background execution
+        let backgroundTimer = null;
+
+        function handleVisibilityChange() {
+            if (document.hidden) {
+                if (state.running && !state.paused && !backgroundTimer) {
+                    backgroundTimer = setInterval(() => tick(performance.now()), 250);
+                }
+                return;
             }
 
-            // Countdown logic
-            const lastTime = state.lastFrameTime;
-            const delta = (timestamp - lastTime) / 1000;
-            state.lastFrameTime = timestamp;
-            state.sessionRemaining = Math.max(0, state.sessionRemaining - delta);
-            UI.remainingTime.textContent = formatTime(state.sessionRemaining);
+            clearInterval(backgroundTimer);
+            backgroundTimer = null;
+            if (!state.running || state.paused) return;
 
-            // Drive session progress bar
-            const progress = state.sessionDuration > 0
-                ? 1 - (state.sessionRemaining / state.sessionDuration) : 0;
-            UI.sessionProgress.style.setProperty('--progress', Math.min(1, progress));
-
-            // Check if time is up — begin wind-down
-            if (state.sessionRemaining <= 0 && !state.sessionComplete) {
-                state.sessionComplete = true;
+            if (performance.now() - state.lastTickTime > STALL_MS) {
+                // The page was frozen while away: pause at the last moment it was running
+                pauseBreathing(state.lastTickTime);
+                return;
             }
 
-            state.animationFrameId = requestAnimationFrame(mainLoop);
+            requestWakeLock();
+            // iOS can hand back an 'interrupted' context (calls, Siri) whose resume() may
+            // never settle; if audio isn't back shortly, pause rather than continue silently
+            if (audioContext && audioContext.state !== 'running') {
+                audioContext.resume().catch(() => {});
+                setTimeout(() => {
+                    if (audioContext.state !== 'running') pauseBreathing();
+                }, 1000);
+            }
+            cancelAnimationFrame(state.animationFrameId);
+            state.animationFrameId = requestAnimationFrame(frame);
+        }
+
+        // Keep the screen awake during a session; the OS drops the lock whenever
+        // the page is hidden, so it is re-requested on return
+        let wakeLockRequest = null;
+
+        function requestWakeLock() {
+            if (!('wakeLock' in navigator) || wakeLockRequest || document.hidden) return;
+            const request = navigator.wakeLock.request('screen').then(sentinel => {
+                sentinel.addEventListener('release', () => {
+                    if (wakeLockRequest === request) wakeLockRequest = null;
+                });
+                return sentinel;
+            }).catch(() => {
+                if (wakeLockRequest === request) wakeLockRequest = null;
+                return null;
+            });
+            wakeLockRequest = request;
+        }
+
+        function releaseWakeLock() {
+            if (!wakeLockRequest) return;
+            const pending = wakeLockRequest;
+            wakeLockRequest = null;
+            pending.then(sentinel => sentinel && sentinel.release()).catch(() => {});
+        }
+
+        let revealTimer = null;
+
+        function revealControls() {
+            UI.app.classList.add('reveal');
+            clearTimeout(revealTimer);
+            revealTimer = setTimeout(() => UI.app.classList.remove('reveal'), 4000);
         }
 
         function formatTime(seconds) {
@@ -814,6 +940,11 @@
 
         function ensureAudioContext() {
             if (!audioContext) {
+                // iOS: play Web Audio as media so the ring/silent switch doesn't mute it.
+                // Other apps' music pauses while this plays; idleAudio() releases it.
+                if ('audioSession' in navigator) {
+                    try { navigator.audioSession.type = 'playback'; } catch {}
+                }
                 try {
                     audioContext = new (window.AudioContext || window.webkitAudioContext)();
                 } catch (e) {
@@ -833,10 +964,19 @@
                     speechSynthesis.speak(warmup);
                 }
             }
-            if (audioContext.state === 'suspended') {
-                audioContext.resume();
+            // 'interrupted' (iOS, after calls or Siri) needs a resume too, not just 'suspended'
+            if (audioContext.state !== 'running' && audioContext.state !== 'closed') {
+                audioContext.resume().catch(() => {});
             }
             return true;
+        }
+
+        // Suspend audio when nothing is audible so the OS releases the audio
+        // session and other apps' music can resume
+        function idleAudio() {
+            if (audioContext && audioContext.state === 'running' && !state.running && !ambientActive) {
+                audioContext.suspend();
+            }
         }
 
         function startBreathing() {
@@ -845,34 +985,38 @@
                 return;
             }
 
+            // Start ambient if enabled but not playing (also covers a saved preference after relaunch)
+            if (ambientActive && !ambientNodes['fireplace']) {
+                toggleAmbient('fireplace', true);
+            }
+
             if (state.paused) {
                 state.paused = false;
                 state.phaseStartTime = performance.now() - state.accumulatedPauseTime;
-                // Restart ambient sound if enabled but not active
-                if (ambientActive && !ambientNodes['fireplace']) {
-                    toggleAmbient('fireplace', true);
-                }
                 announce("Resumed.");
             } else {
                 if (state.running) return;
                 state.sessionRemaining = state.sessionDuration;
                 state.sessionComplete = false;
                 state.phaseIndex = -1;
-                advancePhase();
+                state.phaseStartTime = performance.now();
+                enterPhase();
             }
 
             state.running = true;
-            state.lastFrameTime = performance.now();
-            UI.shapeContainer.classList.add('active');
-            state.animationFrameId = requestAnimationFrame(mainLoop);
+            state.lastTickTime = performance.now();
+            requestWakeLock();
+            state.animationFrameId = requestAnimationFrame(frame);
             updateUIForState();
         }
 
-        function pauseBreathing() {
+        // `at` lets a frozen page pause at its last live moment rather than now
+        function pauseBreathing(at = performance.now()) {
             if (!state.running || state.paused) return;
             state.paused = true;
-            state.accumulatedPauseTime = performance.now() - state.phaseStartTime;
+            state.accumulatedPauseTime = at - state.phaseStartTime;
             cancelAnimationFrame(state.animationFrameId);
+            releaseWakeLock();
 
             // Suspend AudioContext to freeze all audio in place
             if (audioContext && audioContext.state === 'running') {
@@ -893,14 +1037,15 @@
             state.animationFrameId = null;
 
             state.cycleCount = 0;
+            releaseWakeLock();
 
             if (audioContext) {
                 stopBreathSound();
             }
             if ('speechSynthesis' in window) speechSynthesis.cancel();
-            // Ambient keeps playing — do NOT reset it
-
-            UI.shapeContainer.classList.remove('active');
+            // Ambient keeps playing — do NOT reset it (a pause may have suspended it)
+            if (ambientActive) ensureAudioContext();
+            else idleAudio();
 
             // Remove any session flash element
             const flash = document.querySelector('.session-flash');
@@ -913,6 +1058,8 @@
 
         function setMode(newMode) {
             if (newMode === state.mode) return;
+            // Switching mode ends the session, so only allow it once paused
+            if (state.running && !state.paused) return;
             if (state.running) resetToReady();
 
             state.mode = newMode;
@@ -924,6 +1071,7 @@
             resetUI();
         }
 
+        // Returns false when the session wound down instead of continuing
         function advancePhase() {
             state.phaseIndex++;
             if (state.phaseIndex >= PHASES[state.mode].length) {
@@ -933,31 +1081,38 @@
                 // Wind-down: if session timer expired, show summary instead of continuing
                 if (state.sessionComplete) {
                     showSessionSummary();
-                    return;
+                    return false;
                 }
             }
+            return true;
+        }
 
-            const newPhase = PHASES[state.mode][state.phaseIndex];
-            state.phaseStartTime = performance.now();
-            state.accumulatedPauseTime = 0;
+        // `lateBy` (seconds) is how far into the phase we already are when a late tick enters it
+        function enterPhase(lateBy = 0) {
+            const newPhase = currentPhase();
+            const label = newPhase.label || newPhase.name;
 
-            UI.phaseLabel.textContent = newPhase.name;
-            announce(`${newPhase.name} for ${newPhase.duration} seconds.`);
+            UI.phaseLabel.textContent = label;
+            announce(`${label} for ${newPhase.duration} seconds.`);
 
             // Update colors based on phase
             const { color, glow } = PHASE_COLORS[newPhase.name];
             const progressEl = state.mode === 'box' ? UI.boxProgress : UI.triangleProgress;
             progressEl.style.stroke = color;
             UI.phaseLabel.style.color = color;
+            UI.orb.style.color = color;
             UI.countdownTimer.style.textShadow = `0 0 30px ${glow}`;
             UI.sessionProgress.style.setProperty('--bar-color', color);
 
+            // Too far in to be useful (catching up after the page was throttled)
+            if (lateBy > newPhase.duration / 2) return;
+
             if (state.preferences.voice) {
-                speakCue(newPhase.name);
+                speakCue(label);
             }
 
             if (state.preferences.breath && (newPhase.name === 'Inhale' || newPhase.name === 'Exhale')) {
-                playBreathSound(newPhase.duration);
+                playBreathSound(newPhase.name, newPhase.duration - lateBy);
             }
         }
 
@@ -969,13 +1124,39 @@
         // UI & VISUALS
         // =================================================================
 
-        function updateUI(elapsed) {
-            const currentPhase = PHASES[state.mode][state.phaseIndex];
-            const progress = Math.min(elapsed / currentPhase.duration, 1.0);
+        function render(now) {
+            const phase = currentPhase();
+            const elapsed = (now - state.phaseStartTime) / 1000;
+            const progress = Math.min(elapsed / phase.duration, 1.0);
 
-            UI.countdownTimer.textContent = Math.ceil(currentPhase.duration - elapsed);
+            setText(UI.countdownTimer, Math.ceil(phase.duration - elapsed));
 
-            updateShapeProgress(isReducedMotion ? 1 : progress);
+            // The trace starts with the first real phase, not the lead-in
+            if (state.phaseIndex >= 0) updateShapeProgress(isReducedMotion ? 1 : progress);
+            UI.orb.style.transform = `scale(${isReducedMotion ? 0.75 : 0.5 + 0.5 * breathLevel(phase, progress)})`;
+
+            setText(UI.remainingTime, formatTime(state.sessionRemaining));
+            const sessionProgress = state.sessionDuration > 0
+                ? 1 - (state.sessionRemaining / state.sessionDuration) : 0;
+            UI.sessionProgress.style.setProperty('--progress', Math.min(1, sessionProgress));
+        }
+
+        // How full the lungs are (0..1), eased like a natural breath
+        function breathLevel(phase, progress) {
+            const eased = (1 - Math.cos(Math.PI * progress)) / 2;
+            if (phase === LEAD_IN) return 0.5 * (1 - eased);
+            if (phase.name === 'Inhale') return eased;
+            if (phase.name === 'Exhale') return 1 - eased;
+            // Hold: stay where the previous phase left off
+            const phases = PHASES[state.mode];
+            const prev = phases[(state.phaseIndex - 1 + phases.length) % phases.length];
+            return prev.name === 'Inhale' ? 1 : 0;
+        }
+
+        // Avoid re-laying out text every frame when the value hasn't changed
+        function setText(el, value) {
+            const text = String(value);
+            if (el.textContent !== text) el.textContent = text;
         }
 
         function updateShapeProgress(progress) {
@@ -997,6 +1178,8 @@
             UI.countdownTimer.style.textShadow = '';
             UI.remainingTime.textContent = '';
             UI.durationSelector.classList.remove('hidden');
+            UI.orb.style.transform = '';
+            UI.orb.style.color = '';
 
             const progressEl = state.mode === 'box' ? UI.boxProgress : UI.triangleProgress;
             const totalLength = pathLengths[state.mode];
@@ -1025,6 +1208,14 @@
 
         function updateUIForState() {
             updateActionButton();
+
+            // Fade the chrome while breathing; everything returns on pause
+            const inSession = state.running && !state.paused;
+            UI.app.classList.toggle('in-session', inSession);
+            if (!inSession) {
+                clearTimeout(revealTimer);
+                UI.app.classList.remove('reveal');
+            }
 
             // Duration selector: visible when not running, hidden during session
             UI.durationSelector.classList.toggle('hidden', state.running);
@@ -1088,27 +1279,40 @@
             speechSynthesis.speak(utt);
         }
 
-        function playBreathSound(duration) {
-            if (!audioContext || !state.preferences.breath) return;
+        // Inhale and exhale sound different so the audio alone carries the pattern:
+        // inhale brightens and swells toward full lungs, then releases;
+        // exhale starts full and darkens as it settles
+        function playBreathSound(kind, duration) {
+            if (!audioContext || !state.preferences.breath || duration < 0.5) return;
 
-            try { if (breathNodes.source) breathNodes.source.stop(); } catch {}
+            stopBreathSound();
 
-            const source = audioContext.createBufferSource();
-            source.buffer = getNoiseBuffer(duration);
-            source.loop = true;
+            const now = audioContext.currentTime;
+            const end = now + duration;
+            const inhale = kind === 'Inhale';
+
+            const source = makeNoiseSource(duration);
 
             const filter = audioContext.createBiquadFilter();
             filter.type = 'lowpass';
-            filter.frequency.value = 800;
+            filter.frequency.setValueAtTime(inhale ? 350 : 1200, now);
+            filter.frequency.exponentialRampToValueAtTime(inhale ? 1200 : 350, end);
 
             const gain = audioContext.createGain();
-            gain.gain.setValueAtTime(0, audioContext.currentTime);
-            gain.gain.linearRampToValueAtTime(0.1, audioContext.currentTime + 0.15);
-            gain.gain.linearRampToValueAtTime(0, audioContext.currentTime + duration - 0.25);
+            gain.gain.setValueAtTime(0, now);
+            if (inhale) {
+                gain.gain.linearRampToValueAtTime(0.03, now + 0.3);
+                gain.gain.linearRampToValueAtTime(0.1, end - 0.3);
+            } else {
+                gain.gain.linearRampToValueAtTime(0.1, now + 0.2);
+                gain.gain.linearRampToValueAtTime(0.03, end - 0.3);
+            }
+            gain.gain.linearRampToValueAtTime(0, end);
 
             source.connect(filter).connect(gain).connect(audioContext.destination);
-            source.start();
-            source.stop(audioContext.currentTime + duration);
+            source.start(now);
+            source.stop(end);
+            source.onended = () => { source.disconnect(); filter.disconnect(); gain.disconnect(); };
 
             breathNodes = { source, filter, gain };
         }
@@ -1286,7 +1490,9 @@
             state.flashActive = true;
             cancelAnimationFrame(state.animationFrameId);
             state.animationFrameId = null;
-            UI.shapeContainer.classList.remove('active');
+            clearInterval(backgroundTimer);
+            backgroundTimer = null;
+            releaseWakeLock();
             UI.endBtn.style.display = 'none';
 
             // Stop breath sounds — ambient keeps playing
@@ -1342,10 +1548,8 @@
             const toggleEl = UI[`${key}Toggle`];
             if (toggleEl) updateToggleState(toggleEl, state.preferences[key]);
             savePreferences();
-
-            if ((key === 'breath' || key === 'voice') && state.preferences[key]) {
-                ensureAudioContext();
-            }
+            // No audio unlock here: Start does it, and a live AudioContext while idle
+            // would hold the 'playback' session and pause the user's music
         }
 
         function savePreferences() {
