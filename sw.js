@@ -1,11 +1,16 @@
-const CACHE_NAME = 'breathe-v7';
+const CACHE_NAME = 'breathe-v8';
 const ASSETS = [
   './',
   './TriBoxBreathing.html',
   './manifest.json',
   './icon-180.png',
   './icon-192.png',
-  './icon-512.png'
+  './icon-512.png',
+  './audio/breathe-out.mp3',
+  './audio/inhale.mp3',
+  './audio/hold.mp3',
+  './audio/exhale.mp3',
+  './audio/session-complete.mp3'
 ];
 
 // How long a page load waits on the network before falling back to the cached page

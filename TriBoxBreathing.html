@@ -730,7 +730,6 @@
         let audioContext;
         let breathNodes = {};
         let ambientNodes = {};
-        let cachedVoice = null;
         let isReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
         window.matchMedia('(prefers-reduced-motion: reduce)')
             .addEventListener('change', e => { isReducedMotion = e.matches; });
@@ -812,7 +811,7 @@
                 }
             });
 
-            if ('speechSynthesis' in window) initVoices();
+            loadCues();
 
             loadPreferences();
             updateUIForState();
@@ -957,12 +956,13 @@
                 src.buffer = silentBuffer;
                 src.connect(audioContext.destination);
                 src.start();
-                // Warm up speechSynthesis during user gesture (iOS requires this)
-                if ('speechSynthesis' in window) {
-                    const warmup = new SpeechSynthesisUtterance(' ');
-                    warmup.volume = 0;
-                    speechSynthesis.speak(warmup);
-                }
+                // iOS interrupts audio when the app is backgrounded or a call comes in;
+                // pause at the last live moment rather than keep breathing silently
+                audioContext.addEventListener('statechange', () => {
+                    if (state.running && !state.paused && audioContext.state !== 'running') {
+                        pauseBreathing(state.lastTickTime);
+                    }
+                });
             }
             // 'interrupted' (iOS, after calls or Siri) needs a resume too, not just 'suspended'
             if (audioContext.state !== 'running' && audioContext.state !== 'closed') {
@@ -1042,7 +1042,6 @@
             if (audioContext) {
                 stopBreathSound();
             }
-            if ('speechSynthesis' in window) speechSynthesis.cancel();
             // Ambient keeps playing — do NOT reset it (a pause may have suspended it)
             if (ambientActive) ensureAudioContext();
             else idleAudio();
@@ -1248,39 +1247,53 @@
         // AUDIO — Voice Cues
         // =================================================================
 
-        // Voice cue preferences — soft, soothing iOS-optimized
-        const PREFERRED_VOICES = ['Samantha', 'Karen', 'Moira', 'Tessa'];
+        // Recorded cues (Kokoro-82M "af_nicole" voice, Apache-2.0) play through the same
+        // AudioContext as the breath and ambient sounds. iOS speechSynthesis interrupted
+        // Web Audio on every cue and is muted by the silent switch.
+        const CUE_FILES = {
+            'Breathe out': 'audio/breathe-out.mp3',
+            'Inhale': 'audio/inhale.mp3',
+            'Hold': 'audio/hold.mp3',
+            'Exhale': 'audio/exhale.mp3',
+            'Session complete': 'audio/session-complete.mp3'
+        };
+        const CUE_VOLUME = 0.8;
+        const cueBuffers = {};
 
-        function initVoices() {
-            const pickVoice = () => {
-                if (cachedVoice) return;
-                const voices = speechSynthesis.getVoices();
-                if (!voices.length) return;
-                // Prefer specific iOS voices known for natural sound
-                for (const name of PREFERRED_VOICES) {
-                    const match = voices.find(v => v.name.includes(name) && v.lang.startsWith('en'));
-                    if (match) { cachedVoice = match; return; }
-                }
-                // Fall back to any English voice
-                cachedVoice = voices.find(v => v.lang.startsWith('en')) || voices[0];
-            };
-            pickVoice();
-            speechSynthesis.addEventListener('voiceschanged', pickVoice);
+        // Decode up front with an offline context so cues are ready on Start without
+        // creating a live AudioContext early (which would claim the audio session)
+        function loadCues() {
+            const Offline = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+            if (!Offline) return;
+            const decoder = new Offline(1, 1, 44100);
+            for (const [text, url] of Object.entries(CUE_FILES)) {
+                fetch(url)
+                    .then(response => response.arrayBuffer())
+                    .then(data => decoder.decodeAudioData(data))
+                    .then(buffer => { cueBuffers[text] = buffer; })
+                    .catch(() => {});
+            }
         }
 
         function speakCue(text) {
-            if (!('speechSynthesis' in window) || !state.preferences.voice) return;
-            speechSynthesis.cancel();
-            const utt = new SpeechSynthesisUtterance(text);
-            if (cachedVoice) utt.voice = cachedVoice;
-            utt.rate = 0.75;
-            utt.pitch = 0.9;
-            utt.volume = 0.6;
-            speechSynthesis.speak(utt);
+            const buffer = cueBuffers[text];
+            if (!audioContext || !buffer || !state.preferences.voice) return;
+            const source = audioContext.createBufferSource();
+            source.buffer = buffer;
+            const gain = audioContext.createGain();
+            gain.gain.value = CUE_VOLUME;
+            source.connect(gain).connect(audioContext.destination);
+            source.start();
+            source.onended = () => { source.disconnect(); gain.disconnect(); };
         }
 
+        // Inhale: rises from silence to a soft peak ~60% through, then eases all the way
+        // down into the hold (sin² bell skewed by the exponent, peak 0.08)
+        const INHALE_CURVE = Float32Array.from({ length: 128 }, (_, i) =>
+            0.08 * Math.sin(Math.PI * Math.pow(i / 127, 1.45)) ** 2);
+
         // Inhale and exhale sound different so the audio alone carries the pattern:
-        // inhale brightens and swells toward full lungs, then releases;
+        // inhale brightens as it swells and settles before the hold;
         // exhale starts full and darkens as it settles
         function playBreathSound(kind, duration) {
             if (!audioContext || !state.preferences.breath || duration < 0.5) return;
@@ -1295,19 +1308,20 @@
 
             const filter = audioContext.createBiquadFilter();
             filter.type = 'lowpass';
-            filter.frequency.setValueAtTime(inhale ? 350 : 1200, now);
-            filter.frequency.exponentialRampToValueAtTime(inhale ? 1200 : 350, end);
-
             const gain = audioContext.createGain();
-            gain.gain.setValueAtTime(0, now);
             if (inhale) {
-                gain.gain.linearRampToValueAtTime(0.03, now + 0.3);
-                gain.gain.linearRampToValueAtTime(0.1, end - 0.3);
+                filter.frequency.setValueAtTime(300, now);
+                filter.frequency.exponentialRampToValueAtTime(900, now + duration * 0.6);
+                filter.frequency.exponentialRampToValueAtTime(600, end);
+                gain.gain.setValueCurveAtTime(INHALE_CURVE, now, duration);
             } else {
+                filter.frequency.setValueAtTime(1200, now);
+                filter.frequency.exponentialRampToValueAtTime(350, end);
+                gain.gain.setValueAtTime(0, now);
                 gain.gain.linearRampToValueAtTime(0.1, now + 0.2);
                 gain.gain.linearRampToValueAtTime(0.03, end - 0.3);
+                gain.gain.linearRampToValueAtTime(0, end);
             }
-            gain.gain.linearRampToValueAtTime(0, end);
 
             source.connect(filter).connect(gain).connect(audioContext.destination);
             source.start(now);
@@ -1499,7 +1513,6 @@
             if (audioContext) {
                 stopBreathSound();
             }
-            if ('speechSynthesis' in window) speechSynthesis.cancel();
 
             // Calculate stats
             const cycles = state.cycleCount;
