@@ -448,6 +448,12 @@
             line-height: 1.2;
         }
 
+        /* The infinity glyph sits at x-height; scale it to match the "1m" labels */
+        .duration-btn[data-minutes="0"] .duration-value {
+            font-size: 1.3em;
+            line-height: 1;
+        }
+
         /* --- Session Time --- */
         .session-time {
             display: flex;
@@ -621,11 +627,12 @@
             <button class="duration-btn" data-minutes="2">
                 <span class="duration-value">2m</span>
             </button>
-            <button class="duration-btn" data-minutes="3">
-                <span class="duration-value">3m</span>
-            </button>
             <button class="duration-btn selected" data-minutes="5">
                 <span class="duration-value">5m</span>
+            </button>
+            <!-- 0 minutes = run until paused and ended -->
+            <button class="duration-btn" data-minutes="0" aria-label="Until stopped" title="Until stopped">
+                <span class="duration-value">&infin;</span>
             </button>
         </div>
 
@@ -692,8 +699,8 @@
             animationFrameId: null,
             lastTickTime: null,
             cycleCount: 0,
-            sessionDuration: 5 * 60,
-            sessionRemaining: 0,
+            sessionDuration: 5 * 60,   // seconds; 0 = until stopped
+            sessionElapsed: 0,
             sessionComplete: false,
             flashActive: false,
             preferences: {
@@ -833,10 +840,9 @@
             if (!state.running || state.paused) return;
 
             if (state.phaseIndex >= 0) {
-                const delta = (now - state.lastTickTime) / 1000;
-                state.sessionRemaining = Math.max(0, state.sessionRemaining - delta);
+                state.sessionElapsed += (now - state.lastTickTime) / 1000;
                 // Time is up: finish the current cycle, then wind down
-                if (state.sessionRemaining <= 0) state.sessionComplete = true;
+                if (!isIndefinite() && sessionRemaining() <= 0) state.sessionComplete = true;
             }
             state.lastTickTime = now;
 
@@ -906,7 +912,10 @@
             if (!('wakeLock' in navigator) || wakeLockRequest || document.hidden) return;
             const request = navigator.wakeLock.request('screen').then(sentinel => {
                 sentinel.addEventListener('release', () => {
-                    if (wakeLockRequest === request) wakeLockRequest = null;
+                    if (wakeLockRequest !== request) return;
+                    wakeLockRequest = null;
+                    // The OS can drop the lock on its own during a long session; take it back
+                    if (state.running && !state.paused) requestWakeLock();
                 });
                 return sentinel;
             }).catch(() => {
@@ -932,9 +941,19 @@
         }
 
         function formatTime(seconds) {
-            const m = Math.floor(seconds / 60);
+            const h = Math.floor(seconds / 3600);
+            const m = Math.floor((seconds % 3600) / 60);
             const s = Math.floor(seconds % 60);
+            if (h > 0) return `${h}h ${m}m`;
             return m > 0 ? `${m}m ${s}s` : `${s}s`;
+        }
+
+        function isIndefinite() {
+            return state.sessionDuration === 0;
+        }
+
+        function sessionRemaining() {
+            return Math.max(0, state.sessionDuration - state.sessionElapsed);
         }
 
         function ensureAudioContext() {
@@ -996,7 +1015,7 @@
                 announce("Resumed.");
             } else {
                 if (state.running) return;
-                state.sessionRemaining = state.sessionDuration;
+                state.sessionElapsed = 0;
                 state.sessionComplete = false;
                 state.phaseIndex = -1;
                 state.phaseStartTime = performance.now();
@@ -1032,7 +1051,7 @@
             state.paused = false;
             state.sessionComplete = false;
             state.flashActive = false;
-            state.sessionRemaining = 0;
+            state.sessionElapsed = 0;
             cancelAnimationFrame(state.animationFrameId);
             state.animationFrameId = null;
 
@@ -1134,10 +1153,12 @@
             if (state.phaseIndex >= 0) updateShapeProgress(isReducedMotion ? 1 : progress);
             UI.orb.style.transform = `scale(${isReducedMotion ? 0.75 : 0.5 + 0.5 * breathLevel(phase, progress)})`;
 
-            setText(UI.remainingTime, formatTime(state.sessionRemaining));
-            const sessionProgress = state.sessionDuration > 0
-                ? 1 - (state.sessionRemaining / state.sessionDuration) : 0;
-            UI.sessionProgress.style.setProperty('--progress', Math.min(1, sessionProgress));
+            if (isIndefinite()) {
+                setText(UI.remainingTime, formatTime(state.sessionElapsed));
+            } else {
+                setText(UI.remainingTime, formatTime(sessionRemaining()));
+                UI.sessionProgress.style.setProperty('--progress', Math.min(1, state.sessionElapsed / state.sessionDuration));
+            }
         }
 
         // How full the lungs are (0..1), eased like a natural breath
@@ -1220,7 +1241,7 @@
             UI.durationSelector.classList.toggle('hidden', state.running);
 
             // Session progress bar: visible during session
-            UI.sessionProgress.classList.toggle('visible', state.running);
+            UI.sessionProgress.classList.toggle('visible', state.running && !isIndefinite());
 
             UI.modeBtns.forEach(btn => {
                 btn.classList.toggle('active', btn.dataset.mode === state.mode);
@@ -1580,7 +1601,9 @@
                 const savedPrefs = localStorage.getItem(PREF_KEY);
                 if (savedPrefs) {
                     const parsed = JSON.parse(savedPrefs);
-                    if (parsed.sessionDuration) {
+                    const offered = [...document.querySelectorAll('.duration-btn')]
+                        .map(btn => parseInt(btn.dataset.minutes) * 60);
+                    if (offered.includes(parsed.sessionDuration)) {
                         state.sessionDuration = parsed.sessionDuration;
                     }
                     // Migrate old ambient format (object → string|null)
